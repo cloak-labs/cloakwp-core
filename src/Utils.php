@@ -19,7 +19,7 @@ class Utils
   */
   public static function write_log($log)
   {
-    if (!\CLOAKWP_DEBUG) {
+    if (defined('CLOAKWP_DEBUG') && !CLOAKWP_DEBUG) {
       return;
     }
 
