@@ -209,7 +209,8 @@ class Utils
     // Set default options
     $defaults = [
       'recurse' => false,
-      'filename' => null
+      'filename' => null,
+      'extension' => 'php'
     ];
     // Merge passed options with defaults
     $options = array_merge($defaults, $options);
@@ -231,6 +232,8 @@ class Utils
             $files = array_merge($files, $scandir_recursive($path));
           } elseif (is_file($path)) {
             if ($options['filename'] && basename($path) != $options['filename'])
+              continue;
+            if ($options['extension'] && pathinfo($path, PATHINFO_EXTENSION) != $options['extension'])
               continue;
             $files[] = $path;
           }
