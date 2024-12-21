@@ -383,6 +383,51 @@ class CMS extends BetterWPAPI
     return $this;
   }
 
+  /**
+   * By default, SVGs are not allowed to be rendered alongside ACF fields in the admin for 
+   * security purposes. This method ensures that SVGs are allowed (this was initially added to enable 
+   * compatibility with the `VerticalAlignment` field from the CloakWP ACF Abstractions package,
+   * and is considered useful enough to be a core method).
+   */
+  public function enableSVGsForACF(): static
+  {
+    add_filter('wp_kses_allowed_html', function ($tags, $context) {
+      if ($context === 'acf') {
+        $tags['svg'] = [
+          'xmlns' => true,
+          'fill' => true,
+          'viewbox' => true,
+          'role' => true,
+          'aria-hidden' => true,
+          'focusable' => true,
+          'style' => true,
+        ];
+
+        $tags['path'] = [
+          'd' => true,
+          'fill' => true,
+          'style' => true,
+        ];
+
+        $tags['g'] = [
+          'transform' => true,
+        ];
+
+        $tags['rect'] = [
+          'x' => true,
+          'y' => true,
+          'width' => true,
+          'height' => true,
+          'style' => true,
+        ];
+      }
+
+      return $tags;
+    }, 10, 2);
+
+    return $this;
+  }
+
 
   /**
    * This is required in order for WP Admin > Appearance > Menus page to be visible for new Block themes. 
