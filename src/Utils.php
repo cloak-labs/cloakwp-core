@@ -62,11 +62,38 @@ class Utils
 
   /* 
     A function that returns the given post's full URL pathname, eg. `/blog/post-slug`
+    Works for both published and draft posts by respecting the site's permalink structure
   */
   public static function get_post_pathname($post_id)
   {
-    $pathname = parse_url(get_permalink($post_id), PHP_URL_PATH);
-    return $pathname;
+    $post = get_post($post_id);
+    if (!$post)
+      return null;
+
+    // For published posts, use the normal permalink
+    if ($post->post_status === 'publish') {
+      return parse_url(get_permalink($post_id), PHP_URL_PATH);
+    }
+
+    // For drafts, we'll create a temporary copy of the post with 'publish' status
+    $temp_post = clone $post;
+    $temp_post->post_status = 'publish';
+
+    // Ensure post_name (slug) is set
+    if (empty($temp_post->post_name)) {
+      $temp_post->post_name = sanitize_title($temp_post->post_title);
+    }
+
+    // Temporarily override the post in WordPress's cache
+    $GLOBALS['post'] = $temp_post;
+
+    // Get the permalink as if it were published
+    $permalink = get_permalink($temp_post);
+
+    // Restore the original post
+    $GLOBALS['post'] = $post;
+
+    return parse_url($permalink, PHP_URL_PATH);
   }
 
   /* 
