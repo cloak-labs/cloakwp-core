@@ -150,7 +150,7 @@ class CMS extends BetterWPAPI
       throw new InvalidArgumentException("Invalid argument type passed to coreBlocks() -- must be of type array or boolean.");
     }
 
-    return $finalAllowedBlocks;
+    return array_values($finalAllowedBlocks);
   }
 
   public function disableLegacyCustomizer(): static
@@ -216,6 +216,7 @@ class CMS extends BetterWPAPI
 
   public function disableComments(): static
   {
+    add_filter('comments_open', '__return_false');
     add_action('admin_menu', function () {
       remove_menu_page('edit-comments.php');
     });
@@ -224,6 +225,130 @@ class CMS extends BetterWPAPI
       global $wp_admin_bar;
       $wp_admin_bar->remove_menu('comments');
     });
+
+    return $this;
+  }
+
+  public function disableEmojis(): static
+  {
+    // remove emoji detection scripts and styles.
+    add_action('init', function () {
+      remove_action('wp_head', 'print_emoji_detection_script', 7);
+      remove_action('admin_print_scripts', 'print_emoji_detection_script');
+      remove_action('wp_print_styles', 'print_emoji_styles');
+      remove_action('admin_print_styles', 'print_emoji_styles');
+      remove_filter('the_content_feed', 'wp_staticize_emoji');
+      remove_filter('comment_text_rss', 'wp_staticize_emoji');
+      remove_filter('wp_mail', 'wp_staticize_emoji_for_email');
+    });
+
+    // remove TinyMCE emojis.
+    add_filter('tiny_mce_plugins', function ($plugins) {
+      if (is_array($plugins)) {
+        return array_diff($plugins, ['wpemoji']);
+      } else {
+        return [];
+      }
+    });
+
+    return $this;
+  }
+
+  public function disableSmilies(): static
+  {
+    remove_filter('the_content', 'convert_smilies', 20);
+    remove_filter('the_excerpt', 'convert_smilies');
+    remove_filter('the_post_thumbnail_caption', 'convert_smilies');
+    remove_filter('comment_text', 'convert_smilies', 20);
+    remove_filter('widget_text_content', 'convert_smilies', 20);
+
+    return $this;
+  }
+
+  public function disableSvgFilters(): static
+  {
+    add_action('init', function () {
+      remove_action('wp_body_open', 'gutenberg_global_styles_render_svg_filters');
+      remove_action('wp_body_open', 'wp_global_styles_render_svg_filters');
+    });
+
+    return $this;
+  }
+
+  public function disableAssetUrlVersioning(): static
+  {
+    $callback = function (string $url) {
+      // if (is_admin())
+      //   return $url;
+
+      if ($url)
+        return esc_url(remove_query_arg('ver', $url));
+
+      return $url;
+    };
+
+    add_filter('script_loader_src', $callback, 15, 1);
+    add_filter('style_loader_src', $callback, 15, 1);
+
+    return $this;
+  }
+
+  public function disableRoles($roles = ['author', 'contributor', 'subscriber']): static
+  {
+    add_action('init', function () use ($roles) {
+      foreach ($roles as $role) {
+        remove_role($role);
+      }
+    });
+
+    return $this;
+  }
+
+  public function disableFontLibrary(): static
+  {
+    add_filter('block_editor_settings_all', function ($settings) {
+      $settings['fontLibraryEnabled'] = false;
+      return $settings;
+    });
+
+    return $this;
+  }
+
+  public function disableOpenVerse(): static
+  {
+    add_filter('block_editor_settings_all', function ($settings) {
+      $settings['enableOpenverseMediaCategory'] = false;
+      return $settings;
+    });
+
+    return $this;
+  }
+
+  public function replaceLoginLogoLink($url = null, $linkTitle = null): static
+  {
+    add_filter('login_headerurl', function () use ($url) {
+      return $url ?? home_url();
+    });
+
+    add_filter('login_headertext', function () use ($linkTitle) {
+      return $linkTitle ?? get_bloginfo('name');
+    });
+
+    return $this;
+  }
+
+
+  /**
+   * By default, WordPress compresses uploaded JPEG images to reduce file size, using a quality of 90.
+   * This method disables this compression, ensuring the original quality of the image is used. This is
+   * particularly useful if you're applying your own compression at a later stage -- better not to stack
+   * compression filters.
+   */
+  public function disableJpegCompression(): static
+  {
+    add_filter('jpeg_quality', function (): int {
+      return 100;
+    }, 10, 2);
 
     return $this;
   }
@@ -328,22 +453,60 @@ class CMS extends BetterWPAPI
 
   public function disableToolsForEditors(): static
   {
-    if (!current_user_can('administrator')) {
-      add_action('admin_menu', function () {
+    add_action('admin_menu', function () {
+      if (!current_user_can('administrator')) {
         remove_menu_page('tools.php');
-      });
-    }
+      }
+    });
 
     return $this;
   }
 
   public function disableYoastForEditors(): static
   {
-    if (!current_user_can('administrator')) {
-      add_action('admin_menu', function () {
+    add_action('admin_menu', function () {
+      if (!current_user_can('administrator')) {
         remove_menu_page('wpseo_dashboard');
         remove_menu_page('wpseo_workouts');
-      });
+      }
+    });
+
+    return $this;
+  }
+
+  public function disableYoastSitemap(): static
+  {
+    add_filter('wpseo_option_wpseo_defaults', function ($defaults) {
+      $defaults['enable_xml_sitemap'] = false;
+      return $defaults;
+    }, 100, 1);
+
+    return $this;
+  }
+
+  public function disableYoastBlocks(): static
+  {
+    add_filter('wpseo_enable_structured_data_blocks', '__return_false');
+    return $this;
+  }
+
+  public function streamlineYoastInDevelopment(): static
+  {
+    if (WP_ENV == 'development') {
+      add_filter('wpseo_option_wpseo_defaults', function ($defaults) {
+        $defaults['content_analysis_active'] = false;
+        $defaults['keyword_analysis_active'] = false;
+        $defaults['inclusive_language_analysis_active'] = false;
+        $defaults['enable_admin_bar_menu'] = false;
+        $defaults['enable_text_link_counter'] = false;
+        $defaults['enable_metabox_insights'] = false;
+        $defaults['enable_enhanced_slack_sharing'] = false;
+        $defaults['enable_index_now'] = false;
+        $defaults['semrush_integration_active'] = false;
+        $defaults['wincher_integration_active'] = false;
+        $defaults['ignore_search_engines_discouraged_notice'] = true;
+        return $defaults;
+      }, 100, 1);
     }
 
     return $this;
@@ -356,6 +519,42 @@ class CMS extends BetterWPAPI
       $wp_admin_bar->remove_menu('archive');
     });
 
+    return $this;
+  }
+
+  public function disableWpTexturize(): static
+  {
+    add_action('after_setup_theme', function () {
+      add_filter('run_wptexturize', '__return_false', 9999);
+    }, 11);
+
+    // although the above filter is enough, we remove these filters for good measure:
+    $filters = ['the_content', 'the_title', 'the_excerpt', 'the_post_thumbnail_caption', 'single_post_title', 'single_cat_title', 'single_tag_title', 'single_month_title', 'nav_menu_attr_title', 'nav_menu_description', 'term_description', 'get_the_post_type_description', 'list_cats'];
+    foreach ($filters as $filter) {
+      remove_filter($filter, 'wptexturize');
+    }
+
+    return $this;
+  }
+
+  /**
+   * By default, WordPress runs a pointlessly aggressive filter on the_content, the_title, wp_title, etc. to replace lowercase "p" with "P" for any instances of "Wordpress".
+   * It's a dumb branding enforcement that needlessly impacts performance. This method disables these filters.
+   */
+  public function disableCapitalPDangit(): static
+  {
+    $filters = ['the_content', 'the_title', 'wp_title', 'document_title', 'widget_text_content'];
+    foreach ($filters as $filter) {
+      remove_filter($filter, 'capital_P_dangit', 11);
+    }
+    remove_filter('comment_text', 'capital_P_dangit', 31);
+
+    return $this;
+  }
+
+  public function disableLazyLoading(): static
+  {
+    add_filter('wp_lazy_loading_enabled', '__return_false');
     return $this;
   }
 
@@ -401,12 +600,14 @@ class CMS extends BetterWPAPI
           'aria-hidden' => true,
           'focusable' => true,
           'style' => true,
+          'class' => true,
         ];
 
         $tags['path'] = [
           'd' => true,
           'fill' => true,
           'style' => true,
+          'class' => true,
         ];
 
         $tags['g'] = [
