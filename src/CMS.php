@@ -582,6 +582,16 @@ class CMS extends BetterWPAPI
     return $this;
   }
 
+  public function enableSvgUploads(): static
+  {
+    add_filter('upload_mimes', function ($mimes) {
+      $mimes['svg'] = 'image/svg+xml';
+      return $mimes;
+    });
+
+    return $this;
+  }
+
   /**
    * By default, SVGs are not allowed to be rendered alongside ACF fields in the admin for 
    * security purposes. This method ensures that SVGs are allowed (this was initially added to enable 
