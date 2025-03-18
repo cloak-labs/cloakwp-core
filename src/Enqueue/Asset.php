@@ -13,7 +13,7 @@ use InvalidArgumentException;
 abstract class Asset
 {
   protected array $settings;
-  protected string $enqueueHook = 'admin_enqueue_scripts';
+  protected array $enqueueHooks = [];
   protected string $enqueueFunction = ''; // eg. 'wp_enqueue_script' or 'wp_enqueue_style'
 
   public function __construct(string $handle)
@@ -36,11 +36,11 @@ abstract class Asset
   }
 
   /**
-   * Specify the action hook where this asset should be enqueued. 
+   * Specify the action hook(s) where this asset should be enqueued. 
    */
-  public function hook(string $hookName): static
+  public function hooks(array $hookNames): static
   {
-    $this->enqueueHook = $hookName;
+    $this->enqueueHooks = array_merge($this->enqueueHooks, $hookNames);
     return $this;
   }
 
@@ -83,13 +83,21 @@ abstract class Asset
    */
   public function enqueue()
   {
-    add_action($this->enqueueHook, function () {
+    $enqueueFn = function () {
       $args = array_values($this->settings);
       if (is_callable($this->enqueueFunction)) {
         call_user_func($this->enqueueFunction, ...$args);
       } else {
         throw new InvalidArgumentException("The 'enqueueFunction' property for this Asset child class is not a valid function. Assign a value such as 'wp_enqueue_script'.");
       }
-    });
+    };
+
+    if (empty($this->enqueueHooks)) {
+      $enqueueFn();
+    } else {
+      foreach ($this->enqueueHooks as $hook) {
+        add_action($hook, $enqueueFn);
+      }
+    }
   }
 }
