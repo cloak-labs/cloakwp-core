@@ -17,7 +17,7 @@ class Utils
   /*
     Helper function used by the CloakWP plugin to log errors or other details to the WP error log
   */
-  public static function write_log($log)
+  public static function log($log)
   {
     if (defined('CLOAKWP_DEBUG') && !CLOAKWP_DEBUG) {
       return;
@@ -31,12 +31,9 @@ class Utils
   }
 
   /**
-   * A thin wrapper around the built-in `get_post` function; only difference is
-   * that it accepts an associative array post (assumes it has an `id` property),
-   * and always returns the post as a WP_Post instance. Useful for throwing in
-   * a post of multiple format and knowing you'll get it back in WP_Post format.
+   * Useful for throwing in a WP post of multiple formats and knowing you'll get it back as a WP_Post object.
    */
-  public static function get_wp_post_object(int|\WP_Post|array $input): \WP_Post|null
+  public static function asPostObject(int|\WP_Post|array $input): \WP_Post|null
   {
     // If input is an integer, assume it's a post ID
     if (is_int($input)) {
@@ -61,10 +58,10 @@ class Utils
   }
 
   /* 
-    A function that returns the given post's full URL pathname, eg. `/blog/post-slug`
+    Returns the given post's full URL pathname, eg. `/blog/post-slug`
     Works for both published and draft posts by respecting the site's permalink structure
   */
-  public static function get_post_pathname($post_id)
+  public static function getPostPathname($post_id)
   {
     $post = get_post($post_id);
     if (!$post)
@@ -99,7 +96,7 @@ class Utils
   /* 
     Given an author ID, return an object containing its regularly needed fields
   */
-  public static function get_pretty_author($id)
+  public static function getPrettyAuthor($id)
   {
     if (!$id || is_bool($id) || (!is_numeric($id) && !is_string($id)))
       return null;
@@ -138,11 +135,11 @@ class Utils
   /**
    * Function to count and return the total number of posts of a given type; it only counts them instead of retrieving them, ensuring efficiency.
    */
-  public static function get_num_posts_of_type(string $post_type): int
+  public static function countPosts(string $postType): int
   {
     // Set up the query arguments
     $args = array(
-      'post_type' => $post_type,
+      'post_type' => $postType,
       'posts_per_page' => -1,  // Retrieves all posts
       'fields' => 'ids' // Retrieve only the IDs for quicker execution
     );
@@ -157,19 +154,19 @@ class Utils
   /**
    * Returns an array of the names of all custom post types (excludes builtins).
    */
-  public static function get_custom_post_types(PostReturnType $returnType = PostReturnType::Names, array $excluded = []): array
+  public static function getCustomPostTypes(PostReturnType $returnType = PostReturnType::Names, array $excluded = []): array
   {
     $cpts = get_post_types(['_builtin' => false], $returnType->value);
 
     if (!$cpts)
       return [];
 
-    $excluded_types = array_merge(
+    $excludedTypes = array_merge(
       array('acf-field-group', 'acf-field', 'acf-taxonomy', 'acf-post-type', 'acf-ui-options-page'),
       $excluded
     );
 
-    foreach ($excluded_types as $exclude) {
+    foreach ($excludedTypes as $exclude) {
       if (isset($cpts[$exclude])) {
         unset($cpts[$exclude]);
       }
@@ -181,7 +178,7 @@ class Utils
   /**
    * Returns an array of the names of all public post types.
    */
-  public static function get_public_post_types(PostReturnType $returnType = PostReturnType::Names): array
+  public static function getPublicPostTypes(PostReturnType $returnType = PostReturnType::Names): array
   {
     return get_post_types(['public' => true], $returnType->value);
   }
@@ -189,49 +186,23 @@ class Utils
   /**
    * Returns an array of the names of all post types that have the Gutenberg Editor enabled.
    */
-  public static function get_post_types_with_editor(): array
+  public static function getEditorPostTypes(): array
   {
-    $post_types = get_post_types(['show_in_rest' => true], 'names');
-    $post_types = array_values($post_types);
-
+    $postTypes = get_post_types(['show_in_rest' => true], 'names');
+    $postTypes = array_values($postTypes);
 
     if (!function_exists('use_block_editor_for_post_type')) {
       require_once ABSPATH . 'wp-admin/includes/post.php';
     }
-    $post_types = array_filter($post_types, 'use_block_editor_for_post_type');
-    $post_types[] = 'wp_navigation';
-    $post_types = array_filter($post_types, 'post_type_exists');
 
-    return $post_types;
+    $postTypes = array_filter($postTypes, 'use_block_editor_for_post_type');
+    $postTypes[] = 'wp_navigation';
+    $postTypes = array_filter($postTypes, 'post_type_exists');
+
+    return $postTypes;
   }
 
-
-  /*  
-    A function that returns the theme.json color palette -- optionally pass in a block name to return that particular block's color palette
-  */
-  public static function get_theme_color_palette($blockName = null)
-  {
-    $color_palette = [];
-
-    // check if theme.json is being used and if so, grab the settings
-    if (class_exists('WP_Theme_JSON_Resolver')) {
-      $settings = WP_Theme_JSON_Resolver::get_theme_data()->get_settings();
-
-      if ($blockName) {
-        // custom block color palette
-        if (isset($settings['blocks'][$blockName]['color']['palette'])) {
-          $color_palette = $settings['blocks'][$blockName]['color']['palette'];
-        }
-      } elseif (isset($settings['color']['palette']['theme'])) {
-        // full theme color palette
-        $color_palette = $settings['color']['palette']['theme'];
-      }
-    }
-
-    return $color_palette;
-  }
-
-  public static function get_files_from_theme_dir($dir, $options = [])
+  public static function getThemeFilePaths($dir, $options = [])
   {
     // Set default options
     $defaults = [
@@ -243,11 +214,11 @@ class Utils
     $options = array_merge($defaults, $options);
 
     // Get the paths for the child and parent theme directories
-    $child_theme_dir = get_stylesheet_directory() . $dir;
-    $parent_theme_dir = get_template_directory() . $dir;
+    $childThemeDir = get_stylesheet_directory() . $dir;
+    $parentThemeDir = get_template_directory() . $dir;
 
     // Define the recursive function within the main function scope to avoid naming conflicts
-    $scandir_recursive = function ($dir) use (&$scandir_recursive, $options) {
+    $scandirRecursive = function ($dir) use (&$scandirRecursive, $options) {
       $files = [];
       if (is_dir($dir)) {
         $items = scandir($dir);
@@ -256,7 +227,7 @@ class Utils
             continue;
           $path = $dir . '/' . $item;
           if (is_dir($path) && $options['recurse']) {
-            $files = array_merge($files, $scandir_recursive($path));
+            $files = array_merge($files, $scandirRecursive($path));
           } elseif (is_file($path)) {
             if ($options['filename'] && basename($path) != $options['filename'])
               continue;
@@ -270,33 +241,33 @@ class Utils
     };
 
     // Initialize arrays to store files
-    $child_files = [];
-    $parent_files = [];
+    $childFiles = [];
+    $parentFiles = [];
 
     // Get the files from child directory if it exists
-    if (is_dir($child_theme_dir)) {
-      $child_files = $scandir_recursive($child_theme_dir);
+    if (is_dir($childThemeDir)) {
+      $childFiles = $scandirRecursive($childThemeDir);
     }
 
     // Get the files from parent directory if it exists
-    if (is_dir($parent_theme_dir)) {
-      $parent_files = $scandir_recursive($parent_theme_dir);
+    if (is_dir($parentThemeDir)) {
+      $parentFiles = $scandirRecursive($parentThemeDir);
     }
 
     // Create an associative array with filenames as keys and paths as values
     $files = [];
 
     // Add child theme files
-    foreach ($child_files as $file) {
-      $relative_path = str_replace(get_stylesheet_directory(), '', $file);
-      $files[$relative_path] = $file;
+    foreach ($childFiles as $file) {
+      $relativePath = str_replace(get_stylesheet_directory(), '', $file);
+      $files[$relativePath] = $file;
     }
 
     // Add parent theme files, only if they are not overridden by child theme
-    foreach ($parent_files as $file) {
-      $relative_path = str_replace(get_template_directory(), '', $file);
-      if (!isset($files[$relative_path])) {
-        $files[$relative_path] = $file;
+    foreach ($parentFiles as $file) {
+      $relativePath = str_replace(get_template_directory(), '', $file);
+      if (!isset($files[$relativePath])) {
+        $files[$relativePath] = $file;
       }
     }
 
@@ -305,16 +276,24 @@ class Utils
   }
 
   /**
-   * `require_all` provides a simple and effective way to include multiple files and collect their contents in an array.
+   * Returns the full path to a file in the theme, searching first in the child theme, then the parent theme.
    */
-  public static function require_all($files)
+  public static function getThemeFilePath(string $path)
+  {
+    return get_theme_file_path($path);
+  }
+
+  /**
+   * `requireAndCollect` provides a simple and effective way to require multiple files AND collect their return values into an array.
+   */
+  public static function requireAndCollect(array $filePaths): array
   {
     $contents = [];
-    foreach ($files as $file) {
-      if (file_exists($file)) {
-        $contents[] = require $file;
+    foreach ($filePaths as $path) {
+      if (file_exists($path)) {
+        $contents[] = require $path;
       } else {
-        throw new \Exception("File not found: $file");
+        throw new \Exception("File not found: $path");
       }
     }
     return $contents;
@@ -322,11 +301,11 @@ class Utils
 
   /** 
    * A simple wrapper for requiring multiple files using a glob pattern. 
-   * eg. Utils::require_glob(get_stylesheet_directory() . '/models/*.php'); // will require all PHP files within your child theme's `models/` folder
+   * eg. Utils::requireGlob(get_stylesheet_directory() . '/models/*.php'); // will require all PHP files within your child theme's `models/` folder
    */
-  public static function require_glob($folder_path_glob)
+  public static function requireGlob(string $pathGlob)
   {
-    $files = glob($folder_path_glob);
+    $files = glob($pathGlob);
     foreach ($files as $file) {
       require_once $file;
     }
@@ -335,7 +314,7 @@ class Utils
   /**
    * A function that deeply copies Objects (class instances) and Arrays
    */
-  public static function deep_copy($var)
+  public static function deepCopy($var)
   {
     static $copier = null;
 
@@ -347,7 +326,7 @@ class Utils
       $copy = $copier->copy($var);
       return $copy;
     } catch (\Exception $err) {
-      Utils::write_log("Caught Error while running deep_copy: {$err}");
+      Utils::log("Caught Error while running deepCopy: {$err}");
     }
 
     return $var;
