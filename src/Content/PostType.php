@@ -502,6 +502,11 @@ class PostType
     return $this;
   }
 
+  public function getFieldGroups(): array
+  {
+    return $this->fieldGroups;
+  }
+
   /**
    * Run some code before a post of this type is saved, either to trigger a 
    * side-effect or to transform the post data before saving it in the database.
@@ -553,7 +558,7 @@ class PostType
    * Finally, register the Post Type and, if necessary, its ACF Field Groups.
    * Make sure to call this method last -- you can't continue chaining methods after it.
    */
-  public function register()
+  public function register(): static
   {
     add_action('init', function () {
       register_extended_post_type($this->slug, $this->settings, $this->labels);
@@ -610,5 +615,7 @@ class PostType
         return $callback($response, $post, $context);
       }, 50, 3);
     }
+
+    return $this;
   }
 }
