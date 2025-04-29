@@ -188,18 +188,47 @@ class Utils
    */
   public static function getEditorPostTypes(): array
   {
-    $postTypes = get_post_types(['show_in_rest' => true], 'names');
-    $postTypes = array_values($postTypes);
+    $all_post_types = get_post_types([], 'objects');
+    $excluded = [
+      'attachment',
+      'nav_menu_item',
+      'wp_block',
+      'wp_template',
+      'wp_template_part',
+      'wp_global_styles',
+      'wp_navigation',
+      'customize_changeset',
+      'user_request',
+      'oembed_cache',
+      'wp_embed',
+    ];
 
-    if (!function_exists('use_block_editor_for_post_type')) {
-      require_once ABSPATH . 'wp-admin/includes/post.php';
+    $gutenberg_post_types = [];
+
+    foreach ($all_post_types as $post_type => $post_type_obj) {
+      if (
+        !in_array($post_type, $excluded, true) &&
+        $post_type_obj->show_in_rest &&
+        post_type_supports($post_type, 'editor') &&
+        use_block_editor_for_post_type($post_type)
+      ) {
+        $gutenberg_post_types[] = $post_type;
+      }
     }
 
-    $postTypes = array_filter($postTypes, 'use_block_editor_for_post_type');
-    $postTypes[] = 'wp_navigation';
-    $postTypes = array_filter($postTypes, 'post_type_exists');
+    return $gutenberg_post_types;
+    // $postTypes = get_post_types(['show_in_rest' => true, 'block_editor' => true], 'names');
+    // $postTypes = array_values($postTypes);
 
-    return $postTypes;
+    // if (!function_exists('use_block_editor_for_post_type')) {
+    //   require_once ABSPATH . 'wp-admin/includes/post.php';
+    // }
+
+    // $postTypes = array_filter($postTypes, 'use_block_editor_for_post_type');
+    // // $postTypes[] = 'wp_navigation';
+    // $postTypes = array_filter($postTypes, 'post_type_exists');
+
+    // return $postTypes;
   }
 
   public static function getThemeFilePaths($dir, $options = [])
@@ -281,6 +310,14 @@ class Utils
   public static function getThemeFilePath(string $path)
   {
     return get_theme_file_path($path);
+  }
+
+  /**
+   * Returns the full path to a file in the theme, searching first in the child theme, then the parent theme.
+   */
+  public static function getParentThemeFilePath(string $path)
+  {
+    return get_parent_theme_file_path($path);
   }
 
   /**
