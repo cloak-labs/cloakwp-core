@@ -5,6 +5,7 @@ namespace CloakWP\Core;
 use CloakWP\Core\Enqueue\Script;
 use CloakWP\Core\Enqueue\Stylesheet;
 use Snicco\Component\BetterWPAPI\BetterWPAPI;
+use Inpsyde\WpContext;
 
 use InvalidArgumentException;
 use WP_Block_Type_Registry;
@@ -24,11 +25,14 @@ class CMS extends BetterWPAPI
    */
   protected array $postTypes = [];
 
+  public static WpContext $context;
+
   /**
    * Initialize the class and set its properties.
    */
   public function __construct()
   {
+    self::$context = WpContext::determine();
   }
 
   /**
@@ -78,7 +82,7 @@ class CMS extends BetterWPAPI
       $postType->register();
     }
 
-    // save all valid PostType objects into the CloakWP singleton's state, so anyone can access/process them
+    // save all valid PostType objects into the CMS singleton's state, so anyone can access/process them
     $this->postTypes = array_merge($this->postTypes, $validPostTypes); // todo: might need a custom merge method here to handle duplicates?
 
     return $this;
@@ -153,6 +157,42 @@ class CMS extends BetterWPAPI
     return array_values($finalAllowedBlocks);
   }
 
+  /**
+   * Check if the current admin page is a block editor. Should only call this method as early is "init" action with priority 4 (i.e. after post types are registered).
+   * 
+   * @return bool
+   */
+  public function isBlockEditor(): bool
+  {
+    if (!is_admin()) {
+      return false;
+    }
+
+    // Early detection using $_GET and $_POST
+    $post_id = isset($_GET['post']) ? intval($_GET['post']) : (isset($_POST['post_ID']) ? intval($_POST['post_ID']) : 0);
+
+    // If we have a post ID, check if that post supports the block editor
+    if ($post_id && function_exists('use_block_editor_for_post')) {
+      $post = get_post($post_id);
+      if ($post && use_block_editor_for_post($post))
+        return true;
+    }
+
+    // Fallback to screen-based checks if available
+    if (function_exists('get_current_screen')) {
+      $current_screen = get_current_screen();
+      if ($current_screen && $current_screen->is_block_editor()) {
+        return true;
+      }
+
+      if ($current_screen && method_exists($current_screen, 'use_block_editor_for_post_type') && $current_screen->use_block_editor_for_post_type()) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   public function disableLegacyCustomizer(): static
   {
     add_action('init', function () {
@@ -205,6 +245,58 @@ class CMS extends BetterWPAPI
     return $this;
   }
 
+  /**
+   * Throttle the WP "heartbeat" to a lower interval (default is every 10s) on the edit post screen, 
+   * reducing AJAX requests and therefore CPU load.
+   * 
+   * @param int $heartbeatInterval The interval in seconds to throttle the heartbeat to.
+   * @return static
+   */
+  public function throttleHeartbeat(int $heartbeatInterval = 60): static
+  {
+    if ($heartbeatInterval < 10) {
+      throw new InvalidArgumentException("Heartbeat interval should be at least 10 seconds.");
+    }
+
+    add_filter('heartbeat_settings', function ($settings) use ($heartbeatInterval) {
+      $settings['interval'] = $heartbeatInterval;
+      return $settings;
+    }, 9999, 1);
+
+    if (self::$context->isBackoffice()) {
+      /**
+       * Gutenberg hard-codes the heartbeat interval to 10s, ignoring the `heartbeat_settings` PHP filter. The following code
+       * dequeues the core-injected heartbeat and re-registers it with the desired interval.
+       */
+      add_action('admin_enqueue_scripts', function () use ($heartbeatInterval) {
+        // Dequeue core-injected heartbeat (which includes the inline 10s interval script)
+        wp_deregister_script('heartbeat');
+
+        // Re-register heartbeat without inline override
+        wp_register_script(
+          'heartbeat',
+          includes_url('/js/heartbeat.min.js'),
+          ['jquery'],
+          false,
+          true
+        );
+
+        $settings = apply_filters('heartbeat_settings', [
+          'interval' => $heartbeatInterval,
+          'transport' => 'long-polling',
+        ]);
+
+        // Localize settings manually
+        wp_localize_script('heartbeat', 'heartbeatSettings', $settings);
+
+        // Re-enqueue it
+        wp_enqueue_script('heartbeat');
+      }, 100);
+    }
+
+    return $this;
+  }
+
   public function disableWidgets(): static
   {
     add_action('admin_head', function () {
@@ -217,6 +309,7 @@ class CMS extends BetterWPAPI
   public function disableComments(): static
   {
     add_filter('comments_open', '__return_false');
+
     add_action('admin_menu', function () {
       remove_menu_page('edit-comments.php');
     });
