@@ -2,6 +2,14 @@
 
 namespace CloakWP\Core;
 
+/**
+ * ThemeAutoloader is a class that autoloads classes from the Theme and ParentTheme namespaces.
+ * It is used to enable child theme overrides of parent theme classes. Any class loaded from the 
+ * `Theme` namespace will be loaded from the child theme if it exists, otherwise it will load from 
+ * the parent theme. Use the `ParentTheme` namespace to force loading classes from the parent.
+ * 
+ * @package CloakWP\Core
+ */
 class ThemeAutoloader
 {
   const PARENT_NAMESPACE = 'ParentTheme\\';
