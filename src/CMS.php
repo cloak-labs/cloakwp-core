@@ -809,7 +809,7 @@ class CMS extends BetterWPAPI
    */
   public function enableBrowserSync(): static
   {
-    if (WP_ENV !== 'production') {
+    if (WP_ENV == 'development') {
       add_action('admin_head', function () {
         echo '<script id="__bs_script__">//<![CDATA[
           (function() {
