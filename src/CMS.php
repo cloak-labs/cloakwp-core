@@ -125,6 +125,10 @@ class CMS extends BetterWPAPI
 
     $currentPostType = $editorContext->post->post_type;
     $finalAllowedBlocks = array_filter($registeredBlockTypeKeys, fn($b) => !str_starts_with($b, 'core/')); // start with all non-core blocks, then we'll add user-provided core blocks to this list
+
+    // Always include core/block (reusable blocks) -- this ensures we can still create patterns
+    $finalAllowedBlocks[] = 'core/block';
+
     if (is_array($blocks)) {
       foreach ($blocks as $key => $value) {
         if (is_string($value)) {
@@ -461,10 +465,9 @@ class CMS extends BetterWPAPI
    */
   public function disableDefaultPatterns(): static
   {
-    // We use a priority of 11 to load after the parent theme
-    add_action('after_setup_theme', function () {
+    add_action('current_screen', function () {
       remove_theme_support('core-block-patterns');
-    }, 11);
+    }, 20);
 
     return $this;
   }
