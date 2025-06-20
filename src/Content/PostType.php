@@ -511,7 +511,7 @@ class PostType
    * Run some code before a post of this type is saved, either to trigger a 
    * side-effect or to transform the post data before saving it in the database.
    */
-  public function afterChange(callable $callback): static
+  public function afterChange(callable|null $callback): static
   {
     $this->afterChangeCallback = $callback;
     return $this;
@@ -574,7 +574,7 @@ class PostType
       }
     }
 
-    if ($this->afterChangeCallback) {
+    if (is_callable($this->afterChangeCallback)) {
       $callback = $this->afterChangeCallback;
       add_action("save_post_$this->slug", function ($post_id, $post, $update) use ($callback) {
         if (wp_is_post_autosave($post_id)) {
