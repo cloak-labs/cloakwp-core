@@ -586,6 +586,12 @@ class CMS extends BetterWPAPI
     return $this;
   }
 
+  public function disableYoastSearchActionSchema(): static
+  {
+    add_filter('disable_wpseo_json_ld_search', '__return_true');
+    return $this;
+  }
+
   public function disableYoastBreadcrumbSchema(): static
   {
     add_filter(
