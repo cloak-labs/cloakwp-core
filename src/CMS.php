@@ -586,6 +586,49 @@ class CMS extends BetterWPAPI
     return $this;
   }
 
+  public function disableYoastBreadcrumbSchema(): static
+  {
+    add_filter(
+      'wpseo_schema_graph_pieces',
+      /**
+       * Removes the breadcrumb graph pieces from the schema collector.
+       *
+       * @param array  $pieces  The current graph pieces.
+       * @param string $context The current context.
+       *
+       * @return array The remaining graph pieces.
+       */
+      function ($pieces, $context) {
+        return \array_filter($pieces, function ($piece) {
+          return ! $piece instanceof \Yoast\WP\SEO\Generators\Schema\Breadcrumb;
+        });
+      },
+      11,
+      2
+    );
+
+    add_filter(
+      'wpseo_schema_webpage',
+      /**
+       * Removes the breadcrumb property from the WebPage piece.
+       *
+       * @param array $data The WebPage's properties.
+       *
+       * @return array The modified WebPage properties.
+       */
+      function ($data) {
+        if (array_key_exists('breadcrumb', $data)) {
+          unset($data['breadcrumb']);
+        }
+        return $data;
+      },
+      11,
+      1
+    );
+
+    return $this;
+  }
+
   public function streamlineYoastInDevelopment(): static
   {
     if (WP_ENV == 'development') {
