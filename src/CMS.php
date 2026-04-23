@@ -270,31 +270,16 @@ class CMS extends BetterWPAPI
     if (self::$context->isBackoffice()) {
       /**
        * Gutenberg hard-codes the heartbeat interval to 10s, ignoring the `heartbeat_settings` PHP filter. The following code
-       * dequeues the core-injected heartbeat and re-registers it with the desired interval.
+       * overrides the interval in JS after core initializes Heartbeat.
+       *
+       * Important: we avoid deregistering/re-registering the script, because core-localized settings like
+       * ajaxurl + nonce are required for reliable autosave/post-lock behavior, and forcing long-polling can
+       * tie up PHP-FPM workers on small servers.
        */
       add_action('admin_enqueue_scripts', function () use ($heartbeatInterval) {
-        // Dequeue core-injected heartbeat (which includes the inline 10s interval script)
-        wp_deregister_script('heartbeat');
-
-        // Re-register heartbeat without inline override
-        wp_register_script(
-          'heartbeat',
-          includes_url('/js/heartbeat.min.js'),
-          ['jquery'],
-          false,
-          true
-        );
-
-        $settings = apply_filters('heartbeat_settings', [
-          'interval' => $heartbeatInterval,
-          'transport' => 'long-polling',
-        ]);
-
-        // Localize settings manually
-        wp_localize_script('heartbeat', 'heartbeatSettings', $settings);
-
-        // Re-enqueue it
         wp_enqueue_script('heartbeat');
+
+        wp_add_inline_script('heartbeat', "(function(){try{if(window.wp&&wp.heartbeat&&typeof wp.heartbeat.interval==='function'){wp.heartbeat.interval(" . (int) $heartbeatInterval . ");}}catch(e){}})();", 'after');
       }, 100);
     }
 
