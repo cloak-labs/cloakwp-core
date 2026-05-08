@@ -2,6 +2,7 @@
 
 namespace CloakWP\Core;
 
+use CloakWP\Core\Content\ContentModel;
 use CloakWP\Core\Enqueue\Script;
 use CloakWP\Core\Enqueue\Stylesheet;
 use Snicco\Component\BetterWPAPI\BetterWPAPI;
@@ -21,9 +22,9 @@ class CMS extends BetterWPAPI
   private static $instance;
 
   /**
-   * Stores one or more PostType instances.
+   * Stores one or more ContentType instances.
    */
-  protected array $postTypes = [];
+  protected array $contentTypes = [];
 
   public static WpContext $context;
 
@@ -67,34 +68,48 @@ class CMS extends BetterWPAPI
   }
 
   /**
-   * Provide an array of PostType class instances, defining your Custom Post Types and their configurations.
+   * Provide an array of ContentType class instances, defining your content types and their configurations.
    */
-  public function postTypes(array $postTypes): static
+  public function contentTypes(array $contentTypes): static
   {
-    $validPostTypes = [];
+    $validContentTypes = [];
 
-    // validate & register each post type
-    foreach ($postTypes as $postType) {
-      if (!is_object($postType) || !method_exists($postType, 'register'))
-        continue; // invalid post type
+    // validate & register each content type
+    foreach ($contentTypes as $contentType) {
+      if (!is_object($contentType) || !method_exists($contentType, 'register'))
+        continue; // invalid content type
 
-      $validPostTypes[] = $postType;
-      $postType->register();
+      $validContentTypes[] = $contentType;
     }
 
-    // save all valid PostType objects into the CMS singleton's state, so anyone can access/process them
-    $this->postTypes = array_merge($this->postTypes, $validPostTypes); // todo: might need a custom merge method here to handle duplicates?
+    ContentModel::getInstance()
+      ->registerTypes($validContentTypes)
+      ->registerWithWordPress();
+
+    // save all valid content type objects into the CMS singleton's state, so anyone can access/process them
+    $this->contentTypes = ContentModel::getInstance()->getTypes();
 
     return $this;
   }
 
-  public function getPostType(string $postTypeSlug)
+  public function getContentType(string $contentTypeSlug)
   {
-    return array_filter($this->postTypes, fn($postType) => $postType->slug == $postTypeSlug);
+    $registeredType = ContentModel::getInstance()->getType($contentTypeSlug);
+    if ($registeredType) {
+      return [$registeredType];
+    }
+
+    return array_filter($this->contentTypes, fn($contentType) => $contentType->slug == $contentTypeSlug);
   }
-  public function getPostTypeByPostId(int $postId)
+
+  public function getContentTypes(): array
   {
-    return $this->getPostType(get_post_type($postId));
+    return $this->contentTypes;
+  }
+
+  public function getContentTypeByPostId(int $postId)
+  {
+    return $this->getContentType(get_post_type($postId));
   }
 
   /**
