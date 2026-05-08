@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace CloakWP\Core\Content;
 
 use Extended\ACF\Location;
+use InvalidArgumentException;
 
-class PostType
+class ContentType
 {
-  public string $slug;
+  public string $slug = '';
   protected array $settings = [];
   protected array $labels = [];
   protected array|null $fieldGroups = null;
   protected array|null $virtualFields = null;
+  protected bool $singularPagesEnabled = false;
+  private bool $isConfigured = false;
 
   /**
    * @var callable|null $afterChangeCallback
@@ -29,15 +32,55 @@ class PostType
    */
   protected $filterValueCallback;
 
-
-  public function __construct(string $slug)
+  public function __construct(string|null $slug = null)
   {
-    $this->slug = sanitize_key($slug); // sanitize_key ensures consistency/correctness if user provides improper slug, such as non-lowercase
+    if ($slug !== null) {
+      $this->slug = sanitize_key($slug);
+      return;
+    }
+
+    if ($this->slug) {
+      $this->slug = sanitize_key($this->slug);
+    }
   }
 
   public static function make(string|null $slug = null): static
   {
-    return new static($slug);
+    return (new static($slug))->configureOnce();
+  }
+
+  /**
+   * Override this in child classes to define the content type's settings.
+   */
+  protected function configure(): void
+  {
+    //
+  }
+
+  public function configureOnce(): static
+  {
+    if ($this->isConfigured) {
+      return $this;
+    }
+
+    if (!$this->slug) {
+      throw new InvalidArgumentException(static::class . ' must define a content type slug.');
+    }
+
+    $this->configure();
+    $this->isConfigured = true;
+
+    return $this;
+  }
+
+  public function getSlug(): string
+  {
+    return $this->slug;
+  }
+
+  public static function slug(): string
+  {
+    return (new static())->getSlug();
   }
 
   /**
@@ -98,24 +141,50 @@ class PostType
    * 'page-attributes', 'thumbnail', 'custom-fields', and 'post-formats'. Additionally, the 'revisions' 
    * feature dictates whether the post type will store revisions, and the 'comments' feature dictates 
    * whether the comments count will show on the edit screen. A feature can also be specified as an 
-   * array of arguments to provide additional information about supporting that feature. Example: 
-   * 
-   *    array( 'my_feature', array( 'field' => 'value' ) ). 
-   * 
-   * Default is an array containing 'title', 'editor', and 'thumbnail' (the latter is made default 
-   * by Extended CPTs library -- isn't usually).
+   * array of arguments to provide additional information about supporting that feature.
    */
-  public function supports(array $supports): static
+  public function supports(array $features): static
   {
-    $this->settings['supports'] = $supports;
+    return $this->addFeature($features);
+  }
+
+  private function addFeature(array|string $features): static
+  {
+    if (!isset($this->settings['supports'])) {
+      $this->settings['supports'] = [];
+    }
+
+    $addFeature = function (array|string $feature) {
+      if (is_array($feature)) {
+        array_push($this->settings['supports'], $feature);
+      } elseif (!in_array($feature, $this->settings['supports'])) {
+        $this->settings['supports'][] = $feature;
+      }
+    };
+
+    if (is_array($features)) {
+      foreach ($features as $key => $value) {
+        if (is_array($value)) {
+          // Recursively handle nested arrays
+          $this->addFeature($value);
+        } elseif (is_string($key) && ($value === true)) {
+
+          // Handles a directly associative array like ['feature' => true]
+          $addFeature($key);
+        } else {
+          if (is_string($key)) $addFeature([$key => $value]);
+          else $addFeature($value);
+        }
+      }
+    } else {
+      $addFeature($features);
+    }
+
     return $this;
   }
 
   /**
    * Provide a callback function that sets up the meta boxes for the edit form.
-   * Do remove_meta_box() (https://developer.wordpress.org/reference/functions/remove_meta_box/)
-   * and add_meta_box() (https://developer.wordpress.org/reference/functions/add_meta_box/) calls 
-   * in the callback. Default null.
    */
   public function registerMetaBoxCallback(callable $callback): static
   {
@@ -131,12 +200,6 @@ class PostType
 
   /**
    * Customize the archive page behaviour.
-   * 
-   * Example -- show all posts on the post type archive:
-   *  archive([
-   *	  'nopaging' => true
-   *  ])
-   * 
    */
   public function archive(array $archive): static
   {
@@ -146,8 +209,6 @@ class PostType
 
   /**
    * An array of taxonomy identifiers that will be registered for the post type.
-   * Taxonomies can alternatively be registered and attached to this post type later 
-   * on via the CloakWP/Content/Taxonomy class (recommended).
    */
   public function taxonomies(array $taxonomies): static
   {
@@ -156,9 +217,7 @@ class PostType
   }
 
   /**
-   * Sets the query_var key for this post type. Defaults to $post_type key. If false, a 
-   * post type cannot be loaded at ?{query_var}={post_slug}. If specified as a string, 
-   * the query ?{query_var_string}={post_slug} will be valid.
+   * Sets the query_var key for this post type. Defaults to $post_type key.
    */
   public function queryVar(string|bool $queryVar): static
   {
@@ -177,10 +236,6 @@ class PostType
 
   /**
    * Whether to delete posts of this type when deleting a user.
-   *    If true, posts of this type belonging to the user will be moved to Trash when the user is deleted.
-   *    If false, posts of this type belonging to the user will *not* be trashed or deleted.
-   *    If not set (the default), posts are trashed if post type supports the 'author' feature. Otherwise posts are not trashed or deleted.
-   * Default null.
    */
   public function deleteWithUser(bool $deleteWithUser): static
   {
@@ -189,15 +244,7 @@ class PostType
   }
 
   /**
-   * Array of blocks to use as the default initial state for a Gutenberg editor session. Each item should
-   * be an array containing block name and optional attributes; more info: https://developer.wordpress.org/block-editor/reference-guides/block-api/block-templates/
-   * 
-   * Example:
-   *  template([
-   *    ['core/image', [ 'align' => 'left' ]],
-   *    ['core/paragraph', [ 'placeholder' => 'Image Details...' ]],
-   *    ['core/heading', []],
-   *  ])
+   * Array of blocks to use as the default initial state for a Gutenberg editor session.
    */
   public function template(array $blocks): static
   {
@@ -207,9 +254,6 @@ class PostType
 
   /**
    * Whether the block template should be locked if $template is set.
-   *    If set to 'all', the user is unable to insert new blocks, move existing blocks and delete blocks.
-   *    If set to 'insert', the user is able to move existing blocks but is unable to insert new blocks and delete blocks.
-   * Default false.
    */
   public function templateLock(string|false $templateLock): static
   {
@@ -218,10 +262,8 @@ class PostType
   }
 
   /**
-   * Whether a post type is intended for use publicly either via the admin interface or by 
-   * front-end users. While the default settings of $exclude_from_search, $publicly_queryable, 
-   * $show_ui, and $show_in_nav_menus are inherited from $public, each does not rely on this 
-   * relationship and controls a very specific intention. Default false.
+   * Whether a content type is intended for use publicly either via the admin interface or by 
+   * front-end users.
    */
   public function public(bool $isPublic): static
   {
@@ -230,8 +272,7 @@ class PostType
   }
 
   /**
-   * Whether to exclude posts with this post type from front end search results. Default 
-   * is the opposite value of $public.
+   * Whether to exclude posts with this content type from front end search results.
    */
   public function excludeFromSearch(bool $excludeFromSearch): static
   {
@@ -240,9 +281,7 @@ class PostType
   }
 
   /**
-   * Whether queries can be performed on the front end for the post type as part of parse_request(). 
-   * Endpoints would include: * ?post_type={post_type_key} * ?{post_type_key}={single_post_slug} * ?{post_type_query_var}={single_post_slug} 
-   * If not set, the default is inherited from $public.
+   * Whether queries can be performed on the front end for the content type as part of parse_request().
    */
   public function publiclyQueryable(bool $isPubliclyQueryable): static
   {
@@ -260,7 +299,7 @@ class PostType
   }
 
   /**
-   * A short descriptive summary of what the post type is.
+   * A short descriptive summary of what the content type is.
    */
   public function description(string $description): static
   {
@@ -269,12 +308,36 @@ class PostType
   }
 
   /**
-   * Whether to expose this post type to the REST API.
+   * Whether to expose this content type to the REST API.
    */
-  public function showInRest(bool $showInRest): static
+  public function showInRest(bool $showInRest = true): static
   {
     $this->settings['show_in_rest'] = $showInRest;
     return $this;
+  }
+
+  /**
+   * Whether this content type has corresponding frontend pages for individual documents.
+   */
+  public function singularPages(bool $enabled = true): static
+  {
+    $this->singularPagesEnabled = $enabled;
+
+    if ($enabled) {
+      return $this
+        ->public(true)
+        ->showInRest(true);
+    }
+
+    return $this
+      ->public(false)
+      ->showUi(true)
+      ->showInRest(true);
+  }
+
+  public function hasSingularPages(): bool
+  {
+    return $this->singularPagesEnabled;
   }
 
   /**
@@ -287,10 +350,7 @@ class PostType
   }
 
   /**
-   * Where to show the post type in the admin menu. To work, $show_ui must be true. If true, the post 
-   * type is shown in its own top level menu. If false, no menu is shown. If a string of an existing 
-   * top level menu ('tools.php' or 'edit.php?post_type=page', for example), the post type will be 
-   * placed as a sub-menu of that. Default is value of $show_ui.
+   * Where to show the post type in the admin menu.
    */
   public function showInMenu(bool|string $showInMenu): static
   {
@@ -299,7 +359,7 @@ class PostType
   }
 
   /**
-   * Makes this post type available for selection in navigation menus. Default is value of $public.
+   * Makes this post type available for selection in navigation menus.
    */
   public function showInNavMenus(bool $showInNavMenus): static
   {
@@ -308,7 +368,7 @@ class PostType
   }
 
   /**
-   * Makes this post type available via the admin bar. Default is value of $show_in_menu.
+   * Makes this post type available via the admin bar.
    */
   public function showInAdminBar(bool $showInAdminBar): static
   {
@@ -317,17 +377,16 @@ class PostType
   }
 
   /**
-   * Whether to generate and allow a UI for managing this post type in the admin. 
-   * Default is value of $public.
+   * Whether to generate and allow a UI for managing this post type in the admin.
    */
-  public function showUi(bool $showUi): static
+  public function showUi(bool $showUi = true): static
   {
     $this->settings['show_ui'] = $showUi;
     return $this;
   }
 
   /**
-   * To change the base URL of REST API route. Default is post type's slug.
+   * To change the base URL of REST API route.
    */
   public function restBase(string $restBase): static
   {
@@ -336,7 +395,7 @@ class PostType
   }
 
   /**
-   * To change the namespace URL of REST API route. Default is `wp/v2`.
+   * To change the namespace URL of REST API route.
    */
   public function restNamespace(string $restNamespace): static
   {
@@ -345,8 +404,7 @@ class PostType
   }
 
   /**
-   * Customize the REST API controller class name. 
-   * Default is 'WP_REST_Posts_Controller' (https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/)
+   * Customize the REST API controller class name.
    */
   public function restControllerClass(string $restControllerClass): static
   {
@@ -355,15 +413,21 @@ class PostType
   }
 
   /**
-   * Use the blockEditor method to forcefully enable or disable the block editor for post type, 
-   * which takes precedence over the Classic Editor plugin. It's typically used when you want
-   * a post type to be accessible via the REST API (i.e. `showInRest(true)`) while still using
-   * the classic editor (i.e. `blockEditor(false)`). It must be used alongside the showInRest method.
+   * Use the blockEditor method to forcefully enable or disable the block editor for post type.
    */
-  public function blockEditor(bool $hasBlockEditor): static
+  public function blockEditor(bool $hasBlockEditor = true): static
   {
     $this->settings['block_editor'] = $hasBlockEditor;
-    return $this;
+    return $this->addFeature(['editor' => $hasBlockEditor]);
+  }
+
+  /**
+   * Enable the classic editor for this content type.
+   */
+  public function classicEditor(bool $useClassicEditor = true): static
+  {
+    if ($useClassicEditor) $this->settings['block_editor'] = false;
+    return $this->addFeature(['editor' => $useClassicEditor]);
   }
 
   /**
@@ -395,22 +459,6 @@ class PostType
 
   /**
    * Add some custom columns to the Post Type admin listing page.
-   * 
-   * Example:
-   *  adminCols([
-   *    'featured_image' => array(
-   *      'title'          => 'Illustration',
-   *      'featured_image' => 'thumbnail'
-   *    ),
-   *    'published' => array(
-   *      'title'       => 'Published',
-   *      'meta_key'    => 'published_date',
-   *      'date_format' => 'd/m/Y'
-   *    ),
-   *    'genre' => array(
-   *      'taxonomy' => 'genre'
-   *    )
-   *  ])
    */
   public function adminCols(array $adminCols): static
   {
@@ -420,13 +468,6 @@ class PostType
 
   /**
    * Add a dropdown filter to the Post Type admin listing page.
-   * 
-   * Example:
-   *   adminFilters([
-   *     'genre' => [
-   *       'taxonomy' => 'genre'
-   *     ]
-   *   ])
    */
   public function adminFilters(array $adminCols): static
   {
@@ -435,8 +476,7 @@ class PostType
   }
 
   /**
-   * Quick Edit functionality is enabled for all post types by default. 
-   * Pass in `false` to disable it for this post type. 
+   * Quick Edit functionality is enabled for all post types by default.
    */
   public function quickEdit(bool $enableQuickEdit): static
   {
@@ -445,8 +485,7 @@ class PostType
   }
 
   /**
-   * An entry is added to the "At a Glance" dashboard widget for your post type by default. 
-   * Pass in `false` to disable it for this post type. 
+   * An entry is added to the "At a Glance" dashboard widget for your post type by default.
    */
   public function dashboardGlance(bool $enableDashboardGlance): static
   {
@@ -455,9 +494,7 @@ class PostType
   }
 
   /**
-   * It's possible to include your post type in the "Recently Published" section of the 
-   * "Activity" widget on the dashboard. This isn't enabled by default, and can be 
-   * enabled by passing in `true`. 
+   * Include this post type in the "Recently Published" section of the dashboard activity widget.
    */
   public function dashboardActivity(bool $enableDashboardActivity): static
   {
@@ -465,10 +502,9 @@ class PostType
     return $this;
   }
 
-  /** 
-   * A catch-all method allowing you to specify any other settings made available by 
-   * Extended CPTs and the default register_post_type function, that don't already have 
-   * their own method in this class (or use as alternative to individual methods).
+  /**
+   * A catch-all method allowing you to specify settings made available by Extended CPTs
+   * and the default register_post_type function.
    */
   public function withSettings(array $settings): static
   {
@@ -477,15 +513,7 @@ class PostType
   }
 
   /**
-   * Post Type labels are auto-generated based on the post type slug, but you can 
-   * customize these labels using this method.
-   * 
-   * Example:
-   *   labels([
-   *     'singular' => 'Story',
-   *     'plural'   => 'Stories',
-   *     'slug'     => 'stories'
-   *   ])
+   * Content Type labels are auto-generated based on the content type slug, but you can customize these labels.
    */
   public function labels(array $labels): static
   {
@@ -494,7 +522,7 @@ class PostType
   }
 
   /**
-   * Provide an array of CloakWP `FieldGroup` class instances to attach groups of ACF Fields to this post type. 
+   * Provide an array of CloakWP `FieldGroup` class instances to attach groups of ACF Fields to this content type.
    */
   public function fieldGroups(array $fieldGroups): static
   {
@@ -502,14 +530,34 @@ class PostType
     return $this;
   }
 
-  public function getFieldGroups(): array
+  /**
+   * Append one CloakWP `FieldGroup` class instance to this content type.
+   */
+  public function addFieldGroup(object $fieldGroup): static
   {
-    return $this->fieldGroups;
+    return $this->addFieldGroups([$fieldGroup]);
   }
 
   /**
-   * Run some code before a post of this type is saved, either to trigger a 
-   * side-effect or to transform the post data before saving it in the database.
+   * Append CloakWP `FieldGroup` class instances without replacing existing groups.
+   */
+  public function addFieldGroups(array $fieldGroups): static
+  {
+    $this->fieldGroups = [
+      ...$this->getFieldGroups(),
+      ...$fieldGroups,
+    ];
+
+    return $this;
+  }
+
+  public function getFieldGroups(): array
+  {
+    return $this->fieldGroups ?? [];
+  }
+
+  /**
+   * Run some code before a post of this type is saved.
    */
   public function afterChange(callable|null $callback): static
   {
@@ -518,11 +566,7 @@ class PostType
   }
 
   /**
-   * Run some code after a post of this type is fetched from the database, either to 
-   * trigger a side-effect or to transform the post data before returning it -- will 
-   * transform the result of PHP fetching functions such as `get_posts` and `WP_Query`,
-   * as well as REST API responses for this post type -- providing a simple, single 
-   * abstraction around both.
+   * Run some code after a post of this type is fetched from the database.
    */
   public function afterRead(callable $callback): static
   {
@@ -531,12 +575,7 @@ class PostType
   }
 
   /**
-   * Attach some extra "virtual" fields to all post response objects for this post type.
-   * A "virtual" field's value isn't stored in the database -- it's computed at runtime
-   * for every post request. For example, you may have two fields on an "invoice" post
-   * type, "hours" and "hourly_rate"; instead of saving the invoice "total" in the 
-   * database, you could create a virtual field called "total" like so:
-   *    virtualFields([ "total" => fn ($post) => $post["hours"] * $post["hourly_rate"] ]) 
+   * Attach some extra "virtual" fields to all post response objects for this content type.
    */
   public function virtualFields(array $fields): static
   {
@@ -545,8 +584,7 @@ class PostType
   }
 
   /**
-   * Customize the REST API response for posts of this type. Provide a callback
-   * that receives the default response as an argument and returns your modified response.
+   * Customize the REST API response for posts of this type.
    */
   public function value(callable $filterCallback): static
   {
@@ -555,11 +593,12 @@ class PostType
   }
 
   /**
-   * Finally, register the Post Type and, if necessary, its ACF Field Groups.
-   * Make sure to call this method last -- you can't continue chaining methods after it.
+   * Finally, register the Content Type and, if necessary, its ACF Field Groups.
    */
   public function register(): static
   {
+    $this->configureOnce();
+
     add_action('init', function () {
       register_extended_post_type($this->slug, $this->settings, $this->labels);
     }, 3);
@@ -581,23 +620,13 @@ class PostType
           return;
         }
 
-        if (!$update) { // if new object
+        if (!$update) {
           return;
         }
 
         $callback($post_id, $post, $update);
       }, 10, 3);
     }
-
-    // if ($this->afterReadCallback) {
-    //   $callback = $this->afterReadCallback;
-    //   add_filter("the_posts", function ($posts, $query) use ($callback) {
-    //     if ($query->query_vars['post_type'] != $this->slug) return $posts;
-    //     if (!is_array($posts) || !count($posts)) return $posts;
-
-    //     return $callback($posts, $query);
-    //   }, 20, 2);
-    // }
 
     if ($this->virtualFields) {
       register_virtual_fields($this->slug, $this->virtualFields);
@@ -606,12 +635,10 @@ class PostType
     if ($this->filterValueCallback) {
       $callback = $this->filterValueCallback;
       add_filter("rest_prepare_$this->slug", function ($response, $post, $context) use ($callback) {
-        // First check if the REST response is an error:
         if (is_wp_error($response)) {
           return $response;
         }
 
-        // otherwise, return whatever the user's custom filterValueCallback returns
         return $callback($response, $post, $context);
       }, 50, 3);
     }
