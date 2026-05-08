@@ -231,6 +231,21 @@ class Utils
     // return $postTypes;
   }
 
+  /**
+   * Returns an array of file paths from a given directory in the current WordPress theme.
+   *
+   * This function searches both the child and parent theme directories for files matching
+   * the specified criteria. Child theme files will override parent theme files of the same relative path.
+   *
+   * Options:
+   *   - 'recurse' (bool): Whether to recursively scan subdirectories. Default: false.
+   *   - 'filename' (string|null): Filter files by exact filename. Default: null (all files).
+   *   - 'extension' (string|null): Filter files by file extension (without dot). Default: 'php'.
+   *
+   * @param string $dir     The subdirectory path under the theme directory (e.g. '/Blocks').
+   * @param array  $options Optional settings as described above.
+   * @return array          List of full file paths matching the criteria, with child theme files taking precedence.
+   */
   public static function getThemeFilePaths($dir, $options = [])
   {
     // Set default options
@@ -239,6 +254,7 @@ class Utils
       'filename' => null,
       'extension' => 'php'
     ];
+    
     // Merge passed options with defaults
     $options = array_merge($defaults, $options);
 
