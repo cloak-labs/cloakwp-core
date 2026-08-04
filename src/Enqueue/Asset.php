@@ -14,7 +14,9 @@ abstract class Asset
 {
   protected array $settings;
   protected array $enqueueHooks = [];
+  protected int $enqueuePriority = 10;
   protected string $enqueueFunction = ''; // eg. 'wp_enqueue_script' or 'wp_enqueue_style'
+  protected bool $adminOnly = false;
 
   public function __construct(string $handle)
   {
@@ -41,6 +43,28 @@ abstract class Asset
   public function hooks(array $hookNames): static
   {
     $this->enqueueHooks = array_merge($this->enqueueHooks, $hookNames);
+    return $this;
+  }
+
+  /**
+   * Priority used when registering this asset on its enqueue hook(s).
+   * Useful when depending on handles registered later on the same hook
+   *
+   * Default: 10
+   */
+  public function priority(int $priority): static
+  {
+    $this->enqueuePriority = $priority;
+    return $this;
+  }
+
+  /**
+   * Only enqueue in wp-admin. Use with `enqueue_block_assets` so canvas/iframe
+   * styles don't also load on the public front-end.
+   */
+  public function adminOnly(): static
+  {
+    $this->adminOnly = true;
     return $this;
   }
 
@@ -84,6 +108,9 @@ abstract class Asset
   public function enqueue()
   {
     $enqueueFn = function () {
+      if ($this->adminOnly && !is_admin()) {
+        return;
+      }
       $args = array_values($this->settings);
       if (is_callable($this->enqueueFunction)) {
         call_user_func($this->enqueueFunction, ...$args);
@@ -96,7 +123,7 @@ abstract class Asset
       $enqueueFn();
     } else {
       foreach ($this->enqueueHooks as $hook) {
-        add_action($hook, $enqueueFn);
+        add_action($hook, $enqueueFn, $this->enqueuePriority);
       }
     }
   }
