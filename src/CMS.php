@@ -277,24 +277,29 @@ class CMS extends BetterWPAPI
       throw new InvalidArgumentException("Heartbeat interval should be at least 10 seconds.");
     }
 
+    // Cap at 600s — heartbeat.js silently drops minimalInterval outside 1–600.
+    $heartbeatInterval = min($heartbeatInterval, 600);
+
     add_filter('heartbeat_settings', function ($settings) use ($heartbeatInterval) {
       $settings['interval'] = $heartbeatInterval;
+      // Gutenberg (`edit-form-blocks.php`) and post.js call wp.heartbeat.interval(10)
+      // after init. interval() cannot go below minimalInterval, which is locked at
+      // construct time. Setting only `interval` is why this method appeared to no-op.
+      $settings['minimalInterval'] = $heartbeatInterval;
       return $settings;
     }, 9999, 1);
 
     if (self::$context->isBackoffice()) {
-      /**
-       * Gutenberg hard-codes the heartbeat interval to 10s, ignoring the `heartbeat_settings` PHP filter. The following code
-       * overrides the interval in JS after core initializes Heartbeat.
-       *
-       * Important: we avoid deregistering/re-registering the script, because core-localized settings like
-       * ajaxurl + nonce are required for reliable autosave/post-lock behavior, and forcing long-polling can
-       * tie up PHP-FPM workers on small servers.
-       */
-      add_action('admin_enqueue_scripts', function () use ($heartbeatInterval) {
-        wp_enqueue_script('heartbeat');
+      $js = '(function(){function cloakwpSetHeartbeat(){try{if(window.wp&&wp.heartbeat&&typeof wp.heartbeat.interval==="function"){wp.heartbeat.interval(' . (int) $heartbeatInterval . ');}}catch(e){}}if(window.jQuery){jQuery(cloakwpSetHeartbeat);}else{cloakwpSetHeartbeat();}})();';
 
-        wp_add_inline_script('heartbeat', "(function(){try{if(window.wp&&wp.heartbeat&&typeof wp.heartbeat.interval==='function'){wp.heartbeat.interval(" . (int) $heartbeatInterval . ");}}catch(e){}})();", 'after');
+      add_action('admin_enqueue_scripts', function () use ($js) {
+        wp_enqueue_script('heartbeat');
+        wp_add_inline_script('heartbeat', $js, 'after');
+      }, 100);
+
+      add_action('enqueue_block_editor_assets', function () use ($js) {
+        wp_enqueue_script('heartbeat');
+        wp_add_inline_script('heartbeat', $js, 'after');
       }, 100);
     }
 
