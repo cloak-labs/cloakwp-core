@@ -414,10 +414,16 @@ class ContentType
 
   /**
    * Use the blockEditor method to forcefully enable or disable the block editor for post type.
+   *
+   * Note: once `supports` is set, it replaces WordPress's defaults (`title` + `editor`).
+   * We keep `title` when first initializing supports so REST responses still include it.
    */
   public function blockEditor(bool $hasBlockEditor = true): static
   {
     $this->settings['block_editor'] = $hasBlockEditor;
+    if (!isset($this->settings['supports'])) {
+      $this->settings['supports'] = ['title'];
+    }
     return $this->addFeature(['editor' => $hasBlockEditor]);
   }
 
@@ -427,6 +433,9 @@ class ContentType
   public function classicEditor(bool $useClassicEditor = true): static
   {
     if ($useClassicEditor) $this->settings['block_editor'] = false;
+    if (!isset($this->settings['supports'])) {
+      $this->settings['supports'] = ['title'];
+    }
     return $this->addFeature(['editor' => $useClassicEditor]);
   }
 
@@ -436,7 +445,7 @@ class ContentType
   public function titlePlaceholder(string $title): static
   {
     $this->settings['enter_title_here'] = $title;
-    return $this;
+    return $this->addFeature('title');
   }
 
   /**
