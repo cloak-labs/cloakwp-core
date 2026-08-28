@@ -4,15 +4,27 @@
   "type": "library",
   "license": "LGPL-3.0-only",
   "require": {
+    "php": ">=8.2",
     "composer/installers": "^2.2",
     "inpsyde/wp-context": "^1.5",
     "myclabs/deep-copy": "^1.11",
     "snicco/better-wp-api": "^1.9"
   },
+  "require-dev": {
+    "phpunit/phpunit": "^11.0 || ^12.0"
+  },
   "autoload": {
     "psr-4": {
       "CloakWP\\Core\\": "src"
     }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "CloakWP\\Core\\Tests\\": "tests"
+    }
+  },
+  "scripts": {
+    "test": "phpunit"
   },
   "config": {
     "optimize-autoloader": true,
