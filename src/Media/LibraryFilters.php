@@ -9,11 +9,20 @@ use WP_Query;
 /**
  * Registry + WordPress hooks for LibraryFilter instances.
  *
- * First register() boots list-table, ajax, and grid/modal assets once.
+ * Boots on plugins_loaded (see boot-library-filters.php) so the Clear
+ * control and toolbar layout load even when no custom filters exist.
  */
 final class LibraryFilters
 {
   public const SCRIPT_HANDLE = 'cloakwp-media-library-filters';
+
+  public const STYLE_HANDLE = 'cloakwp-media-library-filters';
+
+  public const FILTER_CLASS = 'cloakwp-media-library-filter';
+
+  public const TRACK_CLASS = 'cloakwp-media-library-filter-track';
+
+  public const CLEAR_CLASS = 'cloakwp-media-library-filters-clear';
 
   /** @var array<string, LibraryFilter> */
   private static array $filters = [];
@@ -51,7 +60,7 @@ final class LibraryFilters
     self::$localized = false;
   }
 
-  private static function boot(): void
+  public static function boot(): void
   {
     if (self::$booted) {
       return;
@@ -74,9 +83,61 @@ final class LibraryFilters
       return;
     }
 
-    foreach (self::$filters as $filter) {
-      $filter->renderListFilter();
+    if (self::$filters !== []) {
+      echo '<span class="' . esc_attr(self::TRACK_CLASS) . '">';
+      foreach (self::$filters as $filter) {
+        $filter->renderListFilter();
+      }
+      echo '</span>';
     }
+
+    self::renderClearControl();
+  }
+
+  public static function renderClearControl(): void
+  {
+    $url = function_exists('admin_url') ? admin_url('upload.php') : 'upload.php';
+    $keep = [];
+    if (isset($_GET['mode'])) {
+      $keep['mode'] = sanitize_key((string) wp_unslash($_GET['mode']));
+    }
+    if (isset($_GET['s']) && (string) wp_unslash($_GET['s']) !== '') {
+      $keep['s'] = sanitize_text_field((string) wp_unslash($_GET['s']));
+    }
+    if ($keep !== [] && function_exists('add_query_arg')) {
+      $url = add_query_arg($keep, $url);
+    }
+
+    printf(
+      '<a class="button-link %s" href="%s"%s>%s</a>',
+      esc_attr(self::CLEAR_CLASS),
+      esc_url($url),
+      self::listFiltersAreActive() ? '' : ' hidden',
+      esc_html__('Clear'),
+    );
+  }
+
+  public static function listFiltersAreActive(): bool
+  {
+    $attachment = isset($_GET['attachment-filter'])
+      ? sanitize_text_field((string) wp_unslash($_GET['attachment-filter']))
+      : '';
+    if ($attachment !== '' && $attachment !== '0' && $attachment !== 'all') {
+      return true;
+    }
+
+    $month = isset($_GET['m']) ? (string) wp_unslash($_GET['m']) : '';
+    if ($month !== '' && $month !== '0') {
+      return true;
+    }
+
+    foreach (self::$filters as $filter) {
+      if ($filter->readValue() !== '') {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   public static function filterListQuery(WP_Query $query): void
@@ -128,24 +189,45 @@ final class LibraryFilters
 
   public static function registerAssets(): void
   {
-    if (wp_script_is(self::SCRIPT_HANDLE, 'registered')) {
-      return;
-    }
-
     $jsPath = self::jsPath();
-    $version = is_readable($jsPath) ? (string) filemtime($jsPath) : '1';
+    $cssPath = self::cssPath();
+    $jsMtime = is_readable($jsPath) ? (int) filemtime($jsPath) : 0;
+    $cssMtime = is_readable($cssPath) ? (int) filemtime($cssPath) : 0;
+    $version = (string) max($jsMtime, $cssMtime, 1);
 
-    $deps = ['jquery', 'media-views'];
-    if (wp_script_is('media-grid', 'registered') || wp_script_is('media-grid', 'enqueued')) {
-      $deps[] = 'media-grid';
+    if (!wp_script_is(self::SCRIPT_HANDLE, 'registered')) {
+      $deps = ['jquery', 'media-views'];
+      if (wp_script_is('media-grid', 'registered') || wp_script_is('media-grid', 'enqueued')) {
+        $deps[] = 'media-grid';
+      }
+
+      wp_register_script(self::SCRIPT_HANDLE, false, $deps, $version, true);
+
+      if (is_readable($jsPath)) {
+        $js = file_get_contents($jsPath);
+        if (is_string($js) && $js !== '') {
+          wp_add_inline_script(self::SCRIPT_HANDLE, $js, 'after');
+        }
+      }
     }
 
-    wp_register_script(self::SCRIPT_HANDLE, false, $deps, $version, true);
+    if (!wp_style_is(self::STYLE_HANDLE, 'registered')) {
+      $styleDeps = [];
+      if (wp_style_is('media-views', 'registered') || wp_style_is('wp-admin', 'registered')) {
+        if (wp_style_is('media-views', 'registered')) {
+          $styleDeps[] = 'media-views';
+        } elseif (wp_style_is('wp-admin', 'registered')) {
+          $styleDeps[] = 'wp-admin';
+        }
+      }
 
-    if (is_readable($jsPath)) {
-      $js = file_get_contents($jsPath);
-      if (is_string($js) && $js !== '') {
-        wp_add_inline_script(self::SCRIPT_HANDLE, $js, 'after');
+      wp_register_style(self::STYLE_HANDLE, false, $styleDeps, $version);
+
+      if (is_readable($cssPath)) {
+        $css = file_get_contents($cssPath);
+        if (is_string($css) && $css !== '') {
+          wp_add_inline_style(self::STYLE_HANDLE, $css);
+        }
       }
     }
   }
@@ -170,6 +252,8 @@ final class LibraryFilters
 
   public static function enqueue(): void
   {
+    self::boot();
+
     if (!wp_script_is(self::SCRIPT_HANDLE, 'registered')) {
       self::registerAssets();
     }
@@ -179,6 +263,7 @@ final class LibraryFilters
     }
 
     wp_enqueue_script(self::SCRIPT_HANDLE);
+    wp_enqueue_style(self::STYLE_HANDLE);
     self::localize();
   }
 
@@ -198,9 +283,17 @@ final class LibraryFilters
       $json = '[]';
     }
 
+    $l10n = function_exists('wp_json_encode')
+      ? wp_json_encode(['clear' => __('Clear')])
+      : json_encode(['clear' => 'Clear']);
+    if (!is_string($l10n) || $l10n === '') {
+      $l10n = '{"clear":"Clear"}';
+    }
+
     wp_add_inline_script(
       self::SCRIPT_HANDLE,
-      'window.cloakwpMediaLibraryFilters = ' . $json . ';',
+      'window.cloakwpMediaLibraryFilters = ' . $json . ';'
+      . 'window.cloakwpMediaLibraryFilterL10n = ' . $l10n . ';',
       'before',
     );
     self::$localized = true;
@@ -226,5 +319,10 @@ final class LibraryFilters
   private static function jsPath(): string
   {
     return dirname(__DIR__, 2) . '/resources/js/media-library-filters.js';
+  }
+
+  private static function cssPath(): string
+  {
+    return dirname(__DIR__, 2) . '/resources/css/media-library-filters.css';
   }
 }

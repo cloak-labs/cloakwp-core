@@ -1,0 +1,145 @@
+/**
+ * Shared Media Library filter-bar layout.
+ *
+ * Always enqueued (Clear is useful for core type/date alone). Core sizes
+ * type/date selects at ~48% of a 72px toolbar (`overflow: hidden`), so a
+ * third control wraps onto the attachments grid. Keep every filter on one
+ * row and scroll sideways when they overflow.
+ */
+
+.cloakwp-media-library-toolbar .media-toolbar-secondary {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 66%;
+  max-width: 66%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/*
+ * Core uses visibility:hidden on .spinner, which still occupies 20px in
+ * a flex row and shoves every filter to the right. Pull it out of flow.
+ */
+.cloakwp-media-library-toolbar .media-toolbar-secondary > .spinner {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  z-index: 2;
+  margin: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.media-modal .cloakwp-media-library-toolbar .media-toolbar-secondary > .spinner {
+  top: calc(22px + 15px);
+  transform: none;
+}
+
+.cloakwp-media-library-toolbar .media-toolbar-secondary > .button,
+.cloakwp-media-library-toolbar .media-toolbar-secondary > .cloakwp-media-library-filters-clear {
+  flex-shrink: 0;
+}
+
+.cloakwp-media-library-filters-clear {
+  margin: 0;
+  white-space: nowrap;
+  line-height: 2.1;
+}
+
+.cloakwp-media-library-filters-clear[hidden] {
+  display: none !important;
+}
+
+.media-modal .cloakwp-media-library-toolbar .cloakwp-media-library-filters-clear {
+  margin-top: 22px;
+}
+
+.wp-filter .cloakwp-media-library-filters-clear,
+.tablenav .cloakwp-media-library-filters-clear {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 4px;
+  line-height: 2;
+}
+
+/*
+ * Modal only. Core hides this heading on upload.php grid via
+ * .mode-grid .media-attachments-filter-heading { left: -9999px }.
+ */
+.media-modal .cloakwp-media-library-toolbar .media-attachments-filter-heading {
+  left: 0;
+}
+
+.rtl .media-modal .cloakwp-media-library-toolbar .media-attachments-filter-heading {
+  left: auto;
+  right: 0;
+}
+
+.cloakwp-media-library-filter-track {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cloakwp-media-library-filter-track::-webkit-scrollbar {
+  height: 8px;
+}
+
+.cloakwp-media-library-filter-track::-webkit-scrollbar-thumb {
+  background: #c3c4c7;
+  border-radius: 4px;
+}
+
+/* Modal: sit under the absolute "Filter media" heading. */
+.media-modal .cloakwp-media-library-filter-track {
+  margin-top: 22px;
+  padding-bottom: 2px;
+}
+
+.wp-filter .cloakwp-media-library-filter-track,
+.mode-grid .cloakwp-media-library-filter-track {
+  margin-top: 0;
+}
+
+.cloakwp-media-library-filter-track > * {
+  float: none;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.cloakwp-media-library-filter-track > select.attachment-filters {
+  width: auto;
+  max-width: none;
+}
+
+.media-modal-content .media-frame .cloakwp-media-library-filter-track select.attachment-filters,
+.media-modal-content .media-frame .cloakwp-media-library-filter-track select.attachment-filters:last-of-type {
+  width: auto;
+  max-width: none;
+  margin: 0;
+}
+
+/* List-view filter bar (upload.php list mode). */
+.wp-filter .cloakwp-media-library-filter-track,
+.tablenav .cloakwp-media-library-filter-track {
+  display: inline-flex;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  vertical-align: middle;
+}

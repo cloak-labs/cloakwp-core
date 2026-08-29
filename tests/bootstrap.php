@@ -58,6 +58,43 @@ if (!function_exists('esc_html')) {
   }
 }
 
+if (!function_exists('esc_html__')) {
+  function esc_html__(string $text, string $domain = 'default'): string
+  {
+    return $text;
+  }
+}
+
+if (!function_exists('__')) {
+  function __(string $text, string $domain = 'default'): string
+  {
+    return $text;
+  }
+}
+
+if (!function_exists('esc_url')) {
+  function esc_url($url): string
+  {
+    return (string) $url;
+  }
+}
+
+if (!function_exists('admin_url')) {
+  function admin_url(string $path = ''): string
+  {
+    return '/wp-admin/' . ltrim($path, '/');
+  }
+}
+
+if (!function_exists('add_query_arg')) {
+  function add_query_arg($args, $url)
+  {
+    $query = http_build_query($args);
+
+    return $query === '' ? $url : $url . (str_contains((string) $url, '?') ? '&' : '?') . $query;
+  }
+}
+
 if (!function_exists('add_action')) {
   function add_action($hook, $callback, $priority = 10, $accepted_args = 1): void
   {
@@ -108,6 +145,31 @@ if (!function_exists('wp_enqueue_script')) {
 
 if (!function_exists('wp_add_inline_script')) {
   function wp_add_inline_script($handle, $data, $position = 'after'): void
+  {
+  }
+}
+
+if (!function_exists('wp_style_is')) {
+  function wp_style_is($handle, $status = 'enqueued'): bool
+  {
+    return false;
+  }
+}
+
+if (!function_exists('wp_register_style')) {
+  function wp_register_style($handle, $src, $deps = [], $ver = false, $media = 'all'): void
+  {
+  }
+}
+
+if (!function_exists('wp_enqueue_style')) {
+  function wp_enqueue_style($handle): void
+  {
+  }
+}
+
+if (!function_exists('wp_add_inline_style')) {
+  function wp_add_inline_style($handle, $data): void
   {
   }
 }

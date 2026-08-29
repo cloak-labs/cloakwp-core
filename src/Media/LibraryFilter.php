@@ -11,6 +11,7 @@ use InvalidArgumentException;
  *
  * Simple dropdowns only need options + a query (or a meta key). Custom UIs
  * (multi-select, extra controls) supply listRenderer() and grid('custom').
+ * Custom toolbar views are collected into the shared scroll track automatically.
  *
  * @example
  * LibraryFilter::make('orientation')
@@ -42,6 +43,8 @@ final class LibraryFilter
   private $resolveValue = null;
   /** @var array<string, mixed> */
   private array $jsSettings = [];
+  /** @var list<string> Extra Backbone/URL keys Clear should drop (custom grid UIs). */
+  private array $modelKeys = [];
   private bool $registered = false;
 
   private function __construct(string $id)
@@ -189,6 +192,30 @@ final class LibraryFilter
     return $this;
   }
 
+  /**
+   * Backbone / URL keys this filter writes besides queryVar().
+   *
+   * Select filters only need queryVar. Custom grid UIs that set a different
+   * model key (e.g. a taxonomy slug) must list those keys so Clear can
+   * unset them for every consumer, not just this plugin.
+   *
+   * @param list<string> $keys
+   */
+  public function modelKeys(array $keys): self
+  {
+    $this->assertMutable();
+    $clean = [];
+    foreach ($keys as $key) {
+      $key = sanitize_key((string) $key);
+      if ($key !== '' && !in_array($key, $clean, true)) {
+        $clean[] = $key;
+      }
+    }
+    $this->modelKeys = $clean;
+
+    return $this;
+  }
+
   public function id(): string
   {
     return $this->id;
@@ -238,6 +265,14 @@ final class LibraryFilter
   public function getJsSettings(): array
   {
     return $this->jsSettings;
+  }
+
+  /**
+   * @return list<string>
+   */
+  public function getModelKeys(): array
+  {
+    return $this->modelKeys;
   }
 
   /**
@@ -336,7 +371,7 @@ final class LibraryFilter
 
     $id = 'media-filter-' . $this->id;
     echo '<label class="screen-reader-text" for="' . esc_attr($id) . '">' . esc_html($this->getLabel()) . '</label>';
-    echo '<select name="' . esc_attr($this->queryVar) . '" id="' . esc_attr($id) . '" class="attachment-filters">';
+    echo '<select name="' . esc_attr($this->queryVar) . '" id="' . esc_attr($id) . '" class="attachment-filters ' . esc_attr(LibraryFilters::FILTER_CLASS) . '">';
     printf(
       '<option value=""%s>%s</option>',
       $selected === '' ? ' selected="selected"' : '',
@@ -367,6 +402,7 @@ final class LibraryFilter
       'options' => $this->options,
       'priority' => $this->priority,
       'grid' => $this->grid,
+      'modelKeys' => $this->modelKeys,
       'settings' => $this->jsSettings,
     ];
   }

@@ -87,8 +87,81 @@ final class LibraryFilterTest extends TestCase
 
     $this->assertStringContainsString('id="media-filter-orientation"', $html);
     $this->assertStringContainsString('name="orientation"', $html);
+    $this->assertStringContainsString('attachment-filters ' . LibraryFilters::FILTER_CLASS, $html);
     $this->assertStringContainsString('All orientations', $html);
     $this->assertStringContainsString('value="landscape" selected="selected"', $html);
+  }
+
+  public function testListFiltersWrapInTrack(): void
+  {
+    LibraryFilter::make('orientation')
+      ->options(['portrait' => 'Portrait'])
+      ->metaKey('_media_orientation')
+      ->register();
+
+    ob_start();
+    LibraryFilters::renderListFilters('attachment', 'bar');
+    $html = (string) ob_get_clean();
+
+    $this->assertStringContainsString('class="' . LibraryFilters::TRACK_CLASS . '"', $html);
+    $this->assertStringContainsString('id="media-filter-orientation"', $html);
+    $this->assertStringContainsString(LibraryFilters::CLEAR_CLASS, $html);
+  }
+
+  public function testBootWithoutFiltersRegistersHooks(): void
+  {
+    LibraryFilters::boot();
+
+    $hooks = array_column(WpStubs::$actions, 'hook');
+    $filterHooks = array_column(WpStubs::$filters, 'hook');
+
+    $this->assertContains('restrict_manage_posts', $hooks);
+    $this->assertContains('pre_get_posts', $hooks);
+    $this->assertContains('wp_enqueue_media', $hooks);
+    $this->assertContains('acf/input/admin_enqueue_scripts', $hooks);
+    $this->assertContains('ajax_query_attachments_args', $filterHooks);
+  }
+
+  public function testListBarRendersClearWithoutCustomFilters(): void
+  {
+    LibraryFilters::boot();
+
+    ob_start();
+    LibraryFilters::renderListFilters('attachment', 'bar');
+    $html = (string) ob_get_clean();
+
+    $this->assertStringContainsString('class="button-link ' . LibraryFilters::CLEAR_CLASS . '"', $html);
+    $this->assertStringContainsString('Clear', $html);
+    $this->assertStringContainsString('upload.php', $html);
+    $this->assertStringContainsString(' hidden', $html);
+    $this->assertStringNotContainsString(LibraryFilters::TRACK_CLASS, $html);
+  }
+
+  public function testListClearIsVisibleWhenCoreFilterActive(): void
+  {
+    $_GET['attachment-filter'] = 'image';
+    LibraryFilters::boot();
+
+    ob_start();
+    LibraryFilters::renderListFilters('attachment', 'bar');
+    $html = (string) ob_get_clean();
+
+    $this->assertStringContainsString(LibraryFilters::CLEAR_CLASS, $html);
+    $this->assertStringNotContainsString(' hidden', $html);
+  }
+
+  public function testListClearKeepsModeAndSearch(): void
+  {
+    $_GET['mode'] = 'list';
+    $_GET['s'] = 'logo';
+    LibraryFilters::boot();
+
+    ob_start();
+    LibraryFilters::renderListFilters('attachment', 'bar');
+    $html = (string) ob_get_clean();
+
+    $this->assertStringContainsString('mode=list', $html);
+    $this->assertStringContainsString('s=logo', $html);
   }
 
   public function testRegisterBootsSharedHooks(): void
@@ -177,5 +250,19 @@ final class LibraryFilterTest extends TestCase
     $this->assertSame(-76, $js['priority']);
     $this->assertSame('select', $js['grid']);
     $this->assertSame(['portrait' => 'Portrait'], $js['options']);
+    $this->assertSame([], $js['modelKeys']);
+  }
+
+  public function testToJsIncludesModelKeys(): void
+  {
+    $js = LibraryFilter::make('media_category')
+      ->queryVar('media_category')
+      ->modelKeys(['category_media', 'media_category'])
+      ->query(static function (array $args): array {
+        return $args;
+      })
+      ->toJs();
+
+    $this->assertSame(['category_media', 'media_category'], $js['modelKeys']);
   }
 }

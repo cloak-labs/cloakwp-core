@@ -16,7 +16,10 @@
   "autoload": {
     "psr-4": {
       "CloakWP\\Core\\": "src"
-    }
+    },
+    "files": [
+      "src/Media/boot-library-filters.php"
+    ]
   },
   "autoload-dev": {
     "psr-4": {
