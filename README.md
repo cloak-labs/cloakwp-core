@@ -1,39 +1,84 @@
 # CloakWP Core
 
-OOP wrappers around WordPress for CloakWP sites and sister packages. Fluent builders, a shared content registry, and focused Gutenberg helpers — not a plugin, not a settings UI.
+OOP wrappers around WordPress core, providing you with a beautiful, modern developer experience. Same primitives you already know — post types, taxonomies, nav menus, `wp_enqueue_*`, REST, Gutenberg — with fluent builders, explicit registration, and hook timing handled for you.
+
+It is a library, not a plugin: Composer autoloads `CloakWP\Core\`, and nothing attaches to WordPress until you call `register()` / `boot()`.
 
 ```bash
 composer require cloakwp/core
 ```
 
-PHP 8.2+. Autoloads as `CloakWP\Core\`.
+PHP 8.2+.
 
-## REST APIs
+## Why it exists
 
-Routes require an explicit public or authenticated permission decision. Registration is deferred to `rest_api_init`.
+WordPress APIs work, but they are procedural, easy to get wrong, inconsistent, lack a self-documenting nature, frankly ugly to look at, mostly built in a different era with fragmented design decisions, locked by the need to maintain backwards-compatibility... the list goes on.
+
+**This package aims to make core WordPress APIs feel like the core Laravel team rebuilt it from scratch.** Whether you're building a brochure site or a WordPress plugin, you'll love building on top of WordPress again.
+
+Some core tenets:
+
+- **Say what you mean** — `ContentType::make('project')->showInRest()->supports(['title', 'editor'])` instead of a `$args` array you copy between sites.
+- **Register at the right time** — REST routes wait for `rest_api_init`; post types and taxonomies wait for `init`; assets enqueue on the hooks you name.
+- **Make the dangerous choices explicit** — a REST route is not public unless you mark it `public()` or pass a `permission()` callback.
+- **Keep side effects opt-in** — requiring the package does not add admin UI, cron, or filters. Features implement a small `register()` contract and you boot the ones you want.
+
+We still have plenty of abstractions to build, but for now here's what is available:
+
+## Content modeling
+
+Stop defining your content modeling (CPTs, taxonomies, etc.) via a settings UI that saves config to the database. It should be defined in code. The following classes make that easy-breezy-beautiful:
+
+`ContentType` and `Taxonomy` wrap `register_post_type()` / `register_taxonomy()`. Subclass and implement `configure()`, or chain `::make('slug')`.
+
+`ContentModel` is the registry. Collect types, optionally extend them before WordPress sees them, then `boot()`.
 
 ```php
-use CloakWP\Core\Rest\RestApi;
-use CloakWP\Core\Rest\Route;
+use CloakWP\Core\Content\ContentModel;
+use CloakWP\Core\Content\ContentType;
+use CloakWP\Core\Content\Taxonomy;
 
-RestApi::make('cloakwp')
-  ->routes([
-    Route::get('/menus', new GetMenus())
-      ->public()
-      ->args([
-        'location' => ['required' => true, 'type' => 'string'],
-      ]),
-    Route::post('/menus', new UpdateMenu())
-      ->permission(fn () => current_user_can('edit_theme_options')),
-  ])
-  ->register();
+$model = ContentModel::getInstance();
+
+$model->registerTypes([
+  ContentType::make('project')
+    ->public(true)
+    ->showInRest()
+    ->supports(['title', 'editor', 'thumbnail'])
+    ->rewrite(['slug' => 'work']),
+]);
+
+$model->registerTaxonomies([
+  Taxonomy::make('discipline')
+    ->public(true)
+    ->hierarchical(true)
+    ->showInRest(true)
+    ->forTypes(['project']),
+]);
+
+// optionally modify somewhere further down the chain, before boot:
+$model->extendTypes(function (ContentType $type) {
+  if ($type->getSlug() === 'project') {
+    $type->menuIcon('dashicons-portfolio');
+  }
+});
+
+$model->boot();
 ```
 
-Use `Route::make('PROPFIND', ...)` or pass a method array for arbitrary HTTP methods. Closures, callable arrays, and invokable handler objects are supported.
+On multisite, `ContentModel::getInstance()` is per site; use `forSite($id)` when you need a specific site’s registry.
+
+`MenuLocation` is `register_nav_menu()` with a slug and label:
+
+```php
+use CloakWP\Core\Content\MenuLocation;
+
+MenuLocation::make('header', 'Header')->register();
+```
 
 ## Assets
 
-`Script` and `Stylesheet` wrap `wp_enqueue_*` with handles, deps, hooks, priority, `adminOnly()`, and script loading strategy (`defer` / `async`). Enqueue a collection with `Assets::enqueue([...])`.
+`Script` and `Stylesheet` wrap `wp_enqueue_script` / `wp_enqueue_style`: handle, src, deps, version, hook, priority, `adminOnly()`, and script loading strategy (`defer` / `async`). Enqueue a list with `Assets::enqueue()`.
 
 ```php
 use CloakWP\Core\Enqueue\{Assets, Script, Stylesheet};
@@ -43,10 +88,44 @@ Assets::enqueue([
     ->hooks(['enqueue_block_assets'])
     ->adminOnly()
     ->src(get_theme_file_uri('/assets/css/editor.css')),
+  Script::make('theme-editor')
+    ->hooks(['enqueue_block_assets'])
+    ->adminOnly()
+    ->loadingStrategy('defer')
+    ->src(get_theme_file_uri('/assets/js/editor.js')),
 ]);
 ```
 
+## REST Endpoints
+
+`RestApi` registers a namespace; `Route` is one path. Registration is deferred to `rest_api_init`. Every route needs an explicit permission: `public()` or `permission()`.
+
+```php
+use CloakWP\Core\Rest\RestApi;
+use CloakWP\Core\Rest\Route;
+
+RestApi::make('my-theme/v1')
+  ->routes([
+    Route::get('/projects', function (\WP_REST_Request $request) {
+      return rest_ensure_response([]);
+    })
+      ->public()
+      ->args([
+        'discipline' => ['required' => false, 'type' => 'string'],
+      ]),
+    Route::post('/projects', function (\WP_REST_Request $request) {
+      return rest_ensure_response([]);
+    })
+      ->permission(fn () => current_user_can('edit_posts')),
+  ])
+  ->register();
+```
+
+`Route::get/post/put/patch/delete` cover the usual methods; `Route::make('PROPFIND', ...)` or a method array covers the rest. Closures, callable arrays, and invokable objects are all valid handlers.
+
 ## Gutenberg
+
+`AllowedBlocks` filters `allowed_block_types_all`. You list the core blocks you want; it intersects with whatever earlier filters already allowed or denied, and leaves non-core blocks alone so plugins and custom blocks keep working. `core/block` stays available for patterns unless something upstream removed it.
 
 ```php
 use CloakWP\Core\Gutenberg\AllowedBlocks;
@@ -58,46 +137,38 @@ AllowedBlocks::make([
 ])->register();
 
 if (BlockEditor::isActive()) {
-  // editor-only wiring
+  // editor-screen-only wiring — call on `init` priority 4 or later
 }
 ```
 
-When no earlier filter restricts blocks, non-core blocks remain available and `core/block` is included for patterns. Existing upstream allowlists and denials are always respected.
+`BlockEditor::isActive()` is true on block-editor admin screens after post types exist.
 
-## Content model
+## Media library
 
-`ContentType` and `Taxonomy` are fluent replacements for `register_post_type()` / `register_taxonomy()`. Subclass and implement `configure()`, or chain `::make('slug')`.
-
-`ContentModel` is the registry: register types, extend them before WordPress boots, then `registerWithWordPress()`.
-
-`MenuLocation` registers a nav-menu location and optional ACF fields on the menu or its items.
-
-## Features
-
-`CloakWP\Core\Features\Feature` is the contract for opt-in modules that register their own hooks when `register()` is called. Agency stacks compose features explicitly — Core no longer auto-applies admin opinions.
-
-## Media library filters
-
-`LibraryFilter` is the shared primitive used by CloakWP media plugins. Boot the shared Media Library toolbar behavior explicitly:
+`LibraryFilter` is a first-class Media Library dropdown (list view + grid/modal) instead of hand-rolled `restrict_manage_posts` / `ajax_query_attachments_args` glue. Boot the shared toolbar once, then register filters:
 
 ```php
 use CloakWP\Core\Features\MediaLibraryFilters;
+use CloakWP\Core\Media\LibraryFilter;
 
 MediaLibraryFilters::make()->register();
-```
 
-Loading Composer's autoloader alone does not attach WordPress hooks.
+LibraryFilter::make('orientation')
+  ->label('Filter by orientation')
+  ->allLabel('All orientations')
+  ->options(['portrait' => 'Portrait', 'landscape' => 'Landscape'])
+  ->metaKey('_media_orientation')
+  ->register();
+```
 
 ## Theme autoloader
 
-`ThemeAutoloader::register()` loads `Theme\...` from the child theme when the class exists, otherwise from the parent. Use `ParentTheme\...` to force the parent.
+`ThemeAutoloader::register()` loads classes under the `Theme\...` namespace from the child theme when the class file exists, otherwise from the parent theme (useful for enabling child-theme overrides). Use `ParentTheme\...` to force loading from the parent theme.
+
+## Features
+
+Anything that attaches WordPress hooks implements `CloakWP\Core\Features\Feature` and only runs when you call `register()`. `MediaLibraryFilters` is the bundled example: compose it from your theme the same way you would any other module.
 
 ## Utils
 
-Small helpers used across CloakWP: debug logging (`CLOAKWP_DEBUG`), coerce IDs/arrays to `WP_Post`, draft-safe permalink pathnames, author formatting, post-type inventories, and similar one-off WP chores.
-
-## 2.0 breaking changes
-
-- Removed the `CMS` god object and Better WP API inheritance.
-- Admin/Yoast/DX toggles that previously lived on `CMS` moved to user-land (e.g. agency base theme `AgencyStack`).
-- Use `Assets`, `AllowedBlocks`, `BlockEditor`, and `ContentModel` directly.
+Small helpers for recurring WordPress chores: debug logging (`CLOAKWP_DEBUG`), coerce IDs/arrays to `WP_Post`, draft-safe permalink pathnames, author formatting, post-type inventories, and requiring PHP files from a theme directory.
