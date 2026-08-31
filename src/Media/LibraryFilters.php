@@ -9,8 +9,8 @@ use WP_Query;
 /**
  * Registry + WordPress hooks for LibraryFilter instances.
  *
- * Boots on plugins_loaded (see boot-library-filters.php) so the Clear
- * control and toolbar layout load even when no custom filters exist.
+ * Boot with CloakWP\Core\Features\MediaLibraryFilters so the Clear control
+ * and toolbar layout load even when no custom filters exist.
  */
 final class LibraryFilters
 {

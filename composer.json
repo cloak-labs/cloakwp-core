@@ -5,10 +5,7 @@
   "license": "LGPL-3.0-only",
   "require": {
     "php": ">=8.2",
-    "composer/installers": "^2.2",
-    "inpsyde/wp-context": "^1.5",
-    "myclabs/deep-copy": "^1.11",
-    "snicco/better-wp-api": "^1.9"
+    "myclabs/deep-copy": "^1.11"
   },
   "require-dev": {
     "phpunit/phpunit": "^11.0 || ^12.0"
@@ -16,10 +13,7 @@
   "autoload": {
     "psr-4": {
       "CloakWP\\Core\\": "src"
-    },
-    "files": [
-      "src/Media/boot-library-filters.php"
-    ]
+    }
   },
   "autoload-dev": {
     "psr-4": {
@@ -32,11 +26,7 @@
   "config": {
     "optimize-autoloader": true,
     "preferred-install": "dist",
-    "sort-packages": true,
-    "allow-plugins": {
-      "composer/installers": true,
-      "franzl/studio": true
-    }
+    "sort-packages": true
   },
   "minimum-stability": "stable",
   "prefer-stable": true

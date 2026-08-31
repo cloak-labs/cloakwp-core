@@ -9,8 +9,6 @@ namespace CloakWP\Core\Enqueue;
  */
 class Stylesheet extends Asset
 {
-  protected string $enqueueFunction = 'wp_enqueue_style';
-
   /**
    * The media for which this stylesheet has been defined. Accepts media types like 'all' (default),
    * 'print' and 'screen', or media queries like '(orientation: portrait)' and '(max-width: 640px)'.
@@ -19,5 +17,16 @@ class Stylesheet extends Asset
   {
     $this->settings['media'] = $media;
     return $this;
+  }
+
+  protected function enqueueAsset(): void
+  {
+    wp_enqueue_style(
+      $this->settings['handle'],
+      $this->settings['src'],
+      $this->settings['deps'],
+      $this->settings['ver'],
+      $this->settings['media'] ?? 'all',
+    );
   }
 }

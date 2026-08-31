@@ -11,8 +11,6 @@ use InvalidArgumentException;
  */
 class Script extends Asset
 {
-  protected string $enqueueFunction = 'wp_enqueue_script';
-
   /**
    * Since WordPress v6.3. Used to specify a script loading strategy. Supported strategies are as follows:
    *    "defer": Script is only executed once the DOM tree has fully loaded (but before the DOMContentLoaded and window load events). Deferred scripts are executed in the same order they were printed/added in the DOM, unlike asynchronous scripts.
@@ -43,7 +41,19 @@ class Script extends Asset
 
   private function initArgsIfEmpty(): void
   {
-    if (!isset($this->settings['args']))
+    if (!isset($this->settings['args'])) {
       $this->settings['args'] = [];
+    }
+  }
+
+  protected function enqueueAsset(): void
+  {
+    wp_enqueue_script(
+      $this->settings['handle'],
+      $this->settings['src'],
+      $this->settings['deps'],
+      $this->settings['ver'],
+      $this->settings['args'] ?? [],
+    );
   }
 }

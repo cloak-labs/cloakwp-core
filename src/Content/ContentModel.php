@@ -8,7 +8,8 @@ use InvalidArgumentException;
 
 class ContentModel
 {
-  private static self|null $instance = null;
+  /** @var array<int, self> */
+  private static array $instances = [];
 
   protected array $types = [];
   protected array $typesBySlug = [];
@@ -22,11 +23,33 @@ class ContentModel
    */
   public static function getInstance(): self
   {
-    if (self::$instance === null) {
-      self::$instance = new self();
+    $siteId = function_exists('get_current_blog_id')
+      ? (int) get_current_blog_id()
+      : 1;
+
+    return self::forSite($siteId);
+  }
+
+  public static function forSite(int $siteId): self
+  {
+    if ($siteId < 1) {
+      throw new InvalidArgumentException('A positive WordPress site ID is required.');
     }
 
-    return self::$instance;
+    return self::$instances[$siteId] ??= new self();
+  }
+
+  /**
+   * @internal Reset registry state between tests or long-running jobs.
+   */
+  public static function resetInstances(?int $siteId = null): void
+  {
+    if ($siteId === null) {
+      self::$instances = [];
+      return;
+    }
+
+    unset(self::$instances[$siteId]);
   }
 
   /**

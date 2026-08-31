@@ -15,15 +15,18 @@ abstract class Asset
   protected array $settings;
   protected array $enqueueHooks = [];
   protected int $enqueuePriority = 10;
-  protected string $enqueueFunction = ''; // eg. 'wp_enqueue_script' or 'wp_enqueue_style'
   protected bool $adminOnly = false;
 
   public function __construct(string $handle)
   {
+    if (trim($handle) === '') {
+      throw new InvalidArgumentException('An asset handle must be a non-empty string.');
+    }
+
     $this->settings = [
       'handle' => $handle,
       'src' => '',
-      'deps' => array(),
+      'deps' => [],
       'ver' => false,
     ];
   }
@@ -42,7 +45,16 @@ abstract class Asset
    */
   public function hooks(array $hookNames): static
   {
-    $this->enqueueHooks = array_merge($this->enqueueHooks, $hookNames);
+    foreach ($hookNames as $hookName) {
+      if (!is_string($hookName) || trim($hookName) === '') {
+        throw new InvalidArgumentException('Asset hooks must be non-empty hook names.');
+      }
+
+      if (!in_array($hookName, $this->enqueueHooks, true)) {
+        $this->enqueueHooks[] = $hookName;
+      }
+    }
+
     return $this;
   }
 
@@ -84,39 +96,40 @@ abstract class Asset
    */
   public function deps(array $deps): static
   {
+    foreach ($deps as $dependency) {
+      if (!is_string($dependency) || trim($dependency) === '') {
+        throw new InvalidArgumentException('Asset dependencies must be non-empty handles.');
+      }
+    }
+
     $this->settings['deps'] = $deps;
     return $this;
   }
 
   /**
-   * String specifying script version number, if it has one, which is added to the URL as a 
-   * query string for cache busting purposes. If version is set to false, a version number 
-   * is automatically added equal to current installed WordPress version. If set to null,
-   * no version is added. 
-   * 
+   * Version query string for cache busting. `false` uses the WordPress version;
+   * `null` omits a version. Integers (typical `filemtime()` cache-busters) are
+   * stored as strings.
+   *
    * Default: false
    */
-  public function version(bool|string|null $ver): static
+  public function version(bool|string|int|null $ver): static
   {
-    $this->settings['ver'] = $ver;
+    $this->settings['ver'] = is_int($ver) ? (string) $ver : $ver;
     return $this;
   }
 
   /**
    * Enqueue the script/stylesheet -- call this after the other configuration methods.
    */
-  public function enqueue()
+  public function enqueue(): void
   {
-    $enqueueFn = function () {
+    $enqueueFn = function (): void {
       if ($this->adminOnly && !is_admin()) {
         return;
       }
-      $args = array_values($this->settings);
-      if (is_callable($this->enqueueFunction)) {
-        call_user_func($this->enqueueFunction, ...$args);
-      } else {
-        throw new InvalidArgumentException("The 'enqueueFunction' property for this Asset child class is not a valid function. Assign a value such as 'wp_enqueue_script'.");
-      }
+
+      $this->enqueueAsset();
     };
 
     if (empty($this->enqueueHooks)) {
@@ -127,4 +140,6 @@ abstract class Asset
       }
     }
   }
+
+  abstract protected function enqueueAsset(): void;
 }

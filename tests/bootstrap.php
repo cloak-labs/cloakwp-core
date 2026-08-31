@@ -102,6 +102,7 @@ if (!function_exists('add_action')) {
       'hook' => $hook,
       'callback' => $callback,
       'priority' => $priority,
+      'accepted_args' => $accepted_args,
     ];
   }
 }
@@ -113,14 +114,51 @@ if (!function_exists('add_filter')) {
       'hook' => $hook,
       'callback' => $callback,
       'priority' => $priority,
+      'accepted_args' => $accepted_args,
     ];
+  }
+}
+
+if (!function_exists('register_rest_route')) {
+  function register_rest_route(string $namespace, string $route, array $args): bool
+  {
+    \CloakWP\Core\Tests\WpStubs::$restRoutes[] = [
+      'namespace' => $namespace,
+      'route' => $route,
+      'args' => $args,
+    ];
+
+    return true;
   }
 }
 
 if (!function_exists('is_admin')) {
   function is_admin(): bool
   {
-    return true;
+    return \CloakWP\Core\Tests\WpStubs::$isAdmin;
+  }
+}
+
+if (!function_exists('get_post')) {
+  function get_post($post = null)
+  {
+    $id = is_object($post) ? ($post->ID ?? 0) : (int) $post;
+    return \CloakWP\Core\Tests\WpStubs::$posts[$id] ?? null;
+  }
+}
+
+if (!function_exists('use_block_editor_for_post')) {
+  function use_block_editor_for_post($post): bool
+  {
+    $id = is_object($post) ? (int) ($post->ID ?? 0) : (int) $post;
+    return \CloakWP\Core\Tests\WpStubs::$useBlockEditor[$id] ?? false;
+  }
+}
+
+if (!function_exists('get_current_screen')) {
+  function get_current_screen()
+  {
+    return \CloakWP\Core\Tests\WpStubs::$currentScreen;
   }
 }
 
@@ -138,8 +176,15 @@ if (!function_exists('wp_register_script')) {
 }
 
 if (!function_exists('wp_enqueue_script')) {
-  function wp_enqueue_script($handle): void
+  function wp_enqueue_script($handle, $src = '', $deps = [], $ver = false, $args = []): void
   {
+    \CloakWP\Core\Tests\WpStubs::$enqueuedScripts[] = [
+      'handle' => $handle,
+      'src' => $src,
+      'deps' => $deps,
+      'ver' => $ver,
+      'args' => $args,
+    ];
   }
 }
 
@@ -163,8 +208,15 @@ if (!function_exists('wp_register_style')) {
 }
 
 if (!function_exists('wp_enqueue_style')) {
-  function wp_enqueue_style($handle): void
+  function wp_enqueue_style($handle, $src = '', $deps = [], $ver = false, $media = 'all'): void
   {
+    \CloakWP\Core\Tests\WpStubs::$enqueuedStyles[] = [
+      'handle' => $handle,
+      'src' => $src,
+      'deps' => $deps,
+      'ver' => $ver,
+      'media' => $media,
+    ];
   }
 }
 
