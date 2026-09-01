@@ -50,6 +50,56 @@ final class LibraryFilters
     return self::$filters[$id] ?? null;
   }
 
+  public static function byQueryVar(string $queryVar): ?LibraryFilter
+  {
+    foreach (self::$filters as $filter) {
+      if ($filter->getQueryVar() === $queryVar || $filter->id() === $queryVar) {
+        return $filter;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Apply a map of queryVar/id => value without reading $_REQUEST.
+   *
+   * Call twice (include, then `not:…` exclude values) to AND both clauses.
+   *
+   * @param array<string, mixed> $args
+   * @param array<string, string> $values
+   * @return array<string, mixed>
+   */
+  public static function applyValues(array $args, array $values): array
+  {
+    if ($values === []) {
+      return $args;
+    }
+
+    foreach (self::$filters as $filter) {
+      $value = $values[$filter->getQueryVar()] ?? $values[$filter->id()] ?? '';
+      if ($value === '' || $value === null) {
+        continue;
+      }
+      $args = $filter->applyToArgs($args, (string) $value);
+    }
+
+    return $args;
+  }
+
+  /**
+   * @return list<array<string, mixed>>
+   */
+  public static function publicSchema(): array
+  {
+    $payload = [];
+    foreach (self::$filters as $filter) {
+      $payload[] = $filter->toPublicSchema();
+    }
+
+    return $payload;
+  }
+
   /**
    * Reset static state (unit tests).
    */

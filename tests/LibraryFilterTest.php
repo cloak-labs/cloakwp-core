@@ -265,4 +265,89 @@ final class LibraryFilterTest extends TestCase
 
     $this->assertSame(['category_media', 'media_category'], $js['modelKeys']);
   }
+
+  public function testToPublicSchemaMapsOptions(): void
+  {
+    $schema = LibraryFilter::make('orientation')
+      ->label('Filter by orientation')
+      ->allLabel('All orientations')
+      ->options(['portrait' => 'Portrait', 'landscape' => 'Landscape'])
+      ->metaKey('_media_orientation')
+      ->toPublicSchema();
+
+    $this->assertSame('orientation', $schema['id']);
+    $this->assertSame('orientation', $schema['queryVar']);
+    $this->assertFalse($schema['multiple']);
+    $this->assertFalse($schema['supportsExclude']);
+    $this->assertSame([
+      ['value' => 'portrait', 'label' => 'Portrait'],
+      ['value' => 'landscape', 'label' => 'Landscape'],
+    ], $schema['options']);
+  }
+
+  public function testCustomGridDefaultsToMultipleAndSchemaOptions(): void
+  {
+    $schema = LibraryFilter::make('media_category')
+      ->grid(LibraryFilter::GRID_CUSTOM)
+      ->supportsExclude(true)
+      ->schemaOptions(static function (): array {
+        return [
+          ['value' => '12', 'label' => 'Stone', 'parent' => '1', 'slug' => 'stone'],
+        ];
+      })
+      ->query(static function (array $args): array {
+        return $args;
+      })
+      ->toPublicSchema();
+
+    $this->assertTrue($schema['multiple']);
+    $this->assertTrue($schema['supportsExclude']);
+    $this->assertSame('12', $schema['options'][0]['value']);
+    $this->assertSame('1', $schema['options'][0]['parent']);
+  }
+
+  public function testApplyValuesMergesIncludeAndExclude(): void
+  {
+    LibraryFilter::make('media_category')
+      ->grid(LibraryFilter::GRID_CUSTOM)
+      ->query(static function (array $args, string $value): array {
+        $args['applied'][] = $value;
+
+        return $args;
+      })
+      ->register();
+
+    $args = LibraryFilters::applyValues(['post_type' => 'attachment'], ['media_category' => '12,15']);
+    $args = LibraryFilters::applyValues($args, ['media_category' => 'not:20']);
+
+    $this->assertSame(['12,15', 'not:20'], $args['applied']);
+  }
+
+  public function testApplyValuesLooksUpByIdOrQueryVar(): void
+  {
+    LibraryFilter::make('orientation')
+      ->queryVar('orient')
+      ->metaKey('_media_orientation')
+      ->options(['portrait' => 'Portrait'])
+      ->register();
+
+    $byId = LibraryFilters::applyValues([], ['orientation' => 'portrait']);
+    $byVar = LibraryFilters::applyValues([], ['orient' => 'portrait']);
+
+    $this->assertSame('portrait', $byId['meta_query'][0]['value']);
+    $this->assertSame('portrait', $byVar['meta_query'][0]['value']);
+  }
+
+  public function testPublicSchemaListsRegisteredFilters(): void
+  {
+    LibraryFilter::make('orientation')
+      ->options(['square' => 'Square'])
+      ->metaKey('_media_orientation')
+      ->register();
+
+    $schema = LibraryFilters::publicSchema();
+
+    $this->assertCount(1, $schema);
+    $this->assertSame('orientation', $schema[0]['id']);
+  }
 }

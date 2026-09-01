@@ -45,6 +45,13 @@ final class LibraryFilter
   private array $jsSettings = [];
   /** @var list<string> Extra Backbone/URL keys Clear should drop (custom grid UIs). */
   private array $modelKeys = [];
+  private bool $supportsExclude = false;
+  /** @var bool|null Null = default from grid (custom → multiple, select → single). */
+  private ?bool $multiple = null;
+  /**
+   * @var (callable(): list<array{value: string, label: string, parent?: string|null, slug?: string}>)|null
+   */
+  private $schemaOptionsCallback = null;
   private bool $registered = false;
 
   private function __construct(string $id)
@@ -216,6 +223,42 @@ final class LibraryFilter
     return $this;
   }
 
+  /**
+   * Whether this filter understands exclude encoding (`not:value`).
+   */
+  public function supportsExclude(bool $supports = true): self
+  {
+    $this->assertMutable();
+    $this->supportsExclude = $supports;
+
+    return $this;
+  }
+
+  /**
+   * Whether the public/frontend schema treats this filter as multi-select.
+   * Defaults to true for custom grid UIs and false for select dropdowns.
+   */
+  public function multiple(bool $multiple = true): self
+  {
+    $this->assertMutable();
+    $this->multiple = $multiple;
+
+    return $this;
+  }
+
+  /**
+   * Options for the public schema. Used when options() is empty (custom UIs).
+   *
+   * @param callable(): list<array{value: string, label: string, parent?: string|null, slug?: string}> $callback
+   */
+  public function schemaOptions(callable $callback): self
+  {
+    $this->assertMutable();
+    $this->schemaOptionsCallback = $callback;
+
+    return $this;
+  }
+
   public function id(): string
   {
     return $this->id;
@@ -273,6 +316,67 @@ final class LibraryFilter
   public function getModelKeys(): array
   {
     return $this->modelKeys;
+  }
+
+  public function allowsExclude(): bool
+  {
+    return $this->supportsExclude;
+  }
+
+  public function isMultiple(): bool
+  {
+    if ($this->multiple !== null) {
+      return $this->multiple;
+    }
+
+    return $this->grid === self::GRID_CUSTOM;
+  }
+
+  /**
+   * @return list<array{value: string, label: string, parent?: string|null, slug?: string}>
+   */
+  public function resolveSchemaOptions(): array
+  {
+    if ($this->schemaOptionsCallback !== null) {
+      $rows = ($this->schemaOptionsCallback)();
+      if (!is_array($rows)) {
+        return [];
+      }
+
+      $out = [];
+      foreach ($rows as $row) {
+        if (!is_array($row)) {
+          continue;
+        }
+        $value = (string) ($row['value'] ?? '');
+        if ($value === '') {
+          continue;
+        }
+        $item = [
+          'value' => $value,
+          'label' => (string) ($row['label'] ?? $value),
+        ];
+        if (array_key_exists('parent', $row) && $row['parent'] !== null && $row['parent'] !== '') {
+          $item['parent'] = (string) $row['parent'];
+        }
+        if (isset($row['slug']) && $row['slug'] !== '') {
+          $item['slug'] = (string) $row['slug'];
+        }
+        $out[] = $item;
+      }
+
+      return $out;
+    }
+
+    $out = [];
+    foreach ($this->options as $value => $label) {
+      $out[] = [
+        'value' => (string) $value,
+        'label' => (string) $label,
+      ];
+    }
+
+    return $out;
   }
 
   /**
@@ -404,6 +508,32 @@ final class LibraryFilter
       'grid' => $this->grid,
       'modelKeys' => $this->modelKeys,
       'settings' => $this->jsSettings,
+    ];
+  }
+
+  /**
+   * Schema for decoupled frontends (image library, etc.).
+   *
+   * @return array{
+   *   id: string,
+   *   queryVar: string,
+   *   label: string,
+   *   allLabel: string,
+   *   multiple: bool,
+   *   supportsExclude: bool,
+   *   options: list<array{value: string, label: string, parent?: string|null, slug?: string}>
+   * }
+   */
+  public function toPublicSchema(): array
+  {
+    return [
+      'id' => $this->id,
+      'queryVar' => $this->queryVar,
+      'label' => $this->getLabel(),
+      'allLabel' => $this->getAllLabel(),
+      'multiple' => $this->isMultiple(),
+      'supportsExclude' => $this->supportsExclude,
+      'options' => $this->resolveSchemaOptions(),
     ];
   }
 
