@@ -277,6 +277,7 @@ final class LibraryFilterTest extends TestCase
 
     $this->assertSame('orientation', $schema['id']);
     $this->assertSame('orientation', $schema['queryVar']);
+    $this->assertSame('All orientations', $schema['allLabel']);
     $this->assertFalse($schema['multiple']);
     $this->assertFalse($schema['supportsExclude']);
     $this->assertSame([
@@ -302,6 +303,7 @@ final class LibraryFilterTest extends TestCase
 
     $this->assertTrue($schema['multiple']);
     $this->assertTrue($schema['supportsExclude']);
+    $this->assertSame('All media category', $schema['allLabel']);
     $this->assertSame('12', $schema['options'][0]['value']);
     $this->assertSame('1', $schema['options'][0]['parent']);
   }

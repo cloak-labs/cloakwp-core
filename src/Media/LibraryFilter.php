@@ -276,7 +276,13 @@ final class LibraryFilter
 
   public function getAllLabel(): string
   {
-    return $this->allLabel !== '' ? $this->allLabel : sprintf('All %s', $this->id);
+    if ($this->allLabel !== '') {
+      return $this->allLabel;
+    }
+
+    $readable = str_replace(['_', '-'], ' ', $this->id);
+
+    return sprintf('All %s', $readable);
   }
 
   /**
