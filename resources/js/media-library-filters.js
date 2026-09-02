@@ -458,6 +458,7 @@
     }
 
     bindAcfMediaPopups();
+    bindStickyToolbarOffset();
 
     if (patchedBrowser) {
       return true;
@@ -472,6 +473,108 @@
 
     patchedBrowser = true;
     return true;
+  }
+
+  /**
+   * Core pads the bulk-select grid by 94px when the toolbar becomes
+   * position:fixed. That value assumes a 72px toolbar; ours is height:auto,
+   * so the grid jumps and overflow-anchor fights fixPosition. Write the
+   * real occupied height onto the browser before .fixed is applied.
+   */
+  var stickyOffsetBound = false;
+
+  function stickyOccupiedPx($browser, $toolbar) {
+    var browserEl = $browser && $browser.get(0);
+    var contentEl = $browser
+      ? $browser.children('.attachments-wrapper, .attachments').get(0)
+      : null;
+    var occupied = 0;
+    if (browserEl && contentEl) {
+      occupied = contentEl.getBoundingClientRect().top - browserEl.getBoundingClientRect().top;
+    }
+    if (!(occupied > 0) && $toolbar && $toolbar.length) {
+      occupied = $toolbar.outerHeight(true) || 0;
+    }
+    return Math.max(0, Math.round(occupied));
+  }
+
+  function syncStickyOffset(frame) {
+    if (!frame || typeof frame.isModeActive !== 'function' || !frame.isModeActive('select')) {
+      return;
+    }
+    var $browser = frame.$('.attachments-browser');
+    var $toolbar = $browser.find('.media-toolbar');
+    if (!$browser.length || !$toolbar.length || $browser.hasClass('fixed')) {
+      return;
+    }
+    $browser
+      .get(0)
+      .style.setProperty(
+        '--cloakwp-media-toolbar-sticky-offset',
+        stickyOccupiedPx($browser, $toolbar) + 'px'
+      );
+  }
+
+  function manageFrame() {
+    try {
+      return window.wp && wp.media && wp.media.frames && wp.media.frames.browse
+        ? wp.media.frames.browse
+        : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function bindStickyToolbarOffset() {
+    var Manage =
+      window.wp &&
+      wp.media &&
+      wp.media.view &&
+      wp.media.view.MediaFrame &&
+      wp.media.view.MediaFrame.Manage
+        ? wp.media.view.MediaFrame.Manage
+        : null;
+
+    if (Manage && Manage.prototype && !Manage.prototype._cloakwpStickyOffsetPatched) {
+      var proto = Manage.prototype;
+      var originalBind = proto.bindRegionModeHandlers;
+      if (typeof originalBind === 'function') {
+        proto.bindRegionModeHandlers = function () {
+          originalBind.apply(this, arguments);
+          this.on(
+            'select:activate',
+            function () {
+              var frame = this;
+              window.setTimeout(function () {
+                syncStickyOffset(frame);
+              }, 0);
+            },
+            this
+          );
+        };
+      }
+      proto._cloakwpStickyOffsetPatched = true;
+    }
+
+    var existing = manageFrame();
+    if (existing && typeof existing.on === 'function' && !existing._cloakwpStickyOffsetBound) {
+      existing._cloakwpStickyOffsetBound = true;
+      existing.on('select:activate', function () {
+        var frame = this;
+        window.setTimeout(function () {
+          syncStickyOffset(frame);
+        }, 0);
+      });
+      syncStickyOffset(existing);
+    }
+
+    if (stickyOffsetBound) {
+      return;
+    }
+    stickyOffsetBound = true;
+    $(window).on('scroll.cloakwpStickyOffset resize.cloakwpStickyOffset', function () {
+      syncStickyOffset(manageFrame());
+    });
   }
 
   window.cloakwpMediaLibrary = {
@@ -493,5 +596,6 @@
     patchMediaBrowser();
     bindAcfMediaPopups();
     bindListClear();
+    bindStickyToolbarOffset();
   });
 })(window, jQuery);

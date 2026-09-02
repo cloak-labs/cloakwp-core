@@ -143,3 +143,24 @@
   margin: 0;
   vertical-align: middle;
 }
+
+/*
+ * upload.php grid + Bulk select: core's MediaFrame.Manage.fixPosition toggles
+ * .fixed → position:fixed on the toolbar, then pads the grid by a hardcoded
+ * 94px (media.css). Our toolbar is height:auto (~54px + 15px margin), so 94px
+ * over-shifts the attachments. Scroll anchoring then undoes the jump, the
+ * sticky check flips, and the bar stick/unsticks in a loop until you scroll
+ * hard enough to get past the mismatch. Measure the real offset in JS and
+ * keep the grid from being a scroll anchor.
+ */
+.media-frame.mode-grid .attachments-browser,
+.media-frame.mode-grid .attachments-wrapper,
+.media-frame.mode-grid .media-toolbar {
+  overflow-anchor: none;
+}
+
+.media-frame.mode-select .attachments-browser.fixed:not(.has-load-more) .attachments,
+.media-frame.mode-select .attachments-browser.has-load-more.fixed .attachments-wrapper {
+  top: var(--cloakwp-media-toolbar-sticky-offset, 94px);
+  padding-bottom: var(--cloakwp-media-toolbar-sticky-offset, 94px);
+}
