@@ -178,11 +178,15 @@
       });
     }
     if (browser.toolbar && browser.toolbar.$el) {
-      browser.toolbar.$el.on('change.cloakwpClear', 'select.attachment-filters', function () {
-        window.setTimeout(function () {
-          syncClearVisibility(scopeFor(browser), browser);
-        }, 0);
-      });
+      browser.toolbar.$el.on(
+        'change.cloakwpClear',
+        'select.attachment-filters, .cloakwp-media-library-filter-track select',
+        function () {
+          window.setTimeout(function () {
+            syncClearVisibility(scopeFor(browser), browser);
+          }, 0);
+        }
+      );
     }
   }
 
@@ -213,14 +217,42 @@
     return keys;
   }
 
-  function filtersAreActive($scope, browser) {
-    var active = false;
-    $scope.find('select.attachment-filters').each(function () {
-      if (this.options.length && this.selectedIndex > 0) {
-        active = true;
+  function selectIsActive(select) {
+    if (!select || !select.options || !select.options.length) {
+      return false;
+    }
+
+    return Array.prototype.some.call(select.options, function (option) {
+      if (!option.selected) {
         return false;
       }
+
+      var value = String(option.value || '').toLowerCase();
+      var text = String(option.text || '').trim().toLowerCase();
+
+      return value !== '' && value !== '0' && value !== 'all' && !/^all(?:\s|$)/.test(text);
     });
+  }
+
+  function syncSelectVisualStates($scope) {
+    $scope
+      .find('.cloakwp-media-library-filter-track select, select.attachment-filters')
+      .addBack('select.attachment-filters')
+      .each(function () {
+        $(this).toggleClass('cloakwp-media-library-filter-active', selectIsActive(this));
+      });
+  }
+
+  function filtersAreActive($scope, browser) {
+    var active = false;
+    $scope
+      .find('select.attachment-filters, .cloakwp-media-library-filter-track select')
+      .each(function () {
+        if (selectIsActive(this)) {
+          active = true;
+          return false;
+        }
+      });
     if (active) {
       return true;
     }
@@ -247,6 +279,7 @@
 
   function syncClearVisibility($scope, browser) {
     var $root = $scope && $scope.length ? $scope : $(document);
+    syncSelectVisualStates($root);
     $root.find('.cloakwp-media-library-filters-clear').addBack('.cloakwp-media-library-filters-clear').each(function () {
       var $btn = $(this);
       var $context = $btn.closest('.media-toolbar, .wp-filter, .tablenav, .media-frame');
@@ -387,7 +420,7 @@
     });
     $(document).on(
       'change.cloakwpClear',
-      '.wp-filter select.attachment-filters, .tablenav select.attachment-filters',
+      '.wp-filter select.attachment-filters, .tablenav select.attachment-filters, .wp-filter .cloakwp-media-library-filter-track select, .tablenav .cloakwp-media-library-filter-track select',
       function () {
         syncClearVisibility($(this).closest('.wp-filter, .tablenav'), null);
       }

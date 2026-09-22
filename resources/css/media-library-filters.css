@@ -134,6 +134,26 @@
   max-width: none;
 }
 
+/*
+ * Make each filter's fallback ("All …") visually quieter, then emphasize
+ * a concrete selection. JS applies the active class to core and custom selects.
+ */
+.cloakwp-media-library-toolbar select.attachment-filters,
+.wp-filter select.attachment-filters,
+.tablenav select.attachment-filters,
+.cloakwp-media-library-filter-track select {
+  color: rgba(44, 51, 56, 0.8);
+  font-weight: 400;
+}
+
+.cloakwp-media-library-toolbar select.attachment-filters.cloakwp-media-library-filter-active,
+.wp-filter select.attachment-filters.cloakwp-media-library-filter-active,
+.tablenav select.attachment-filters.cloakwp-media-library-filter-active,
+.cloakwp-media-library-filter-track select.cloakwp-media-library-filter-active {
+  color: #000;
+  font-weight: 500;
+}
+
 .media-modal-content .media-frame .cloakwp-media-library-filter-track select.attachment-filters,
 .media-modal-content .media-frame .cloakwp-media-library-filter-track select.attachment-filters:last-of-type {
   width: auto;
