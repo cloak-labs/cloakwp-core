@@ -379,18 +379,23 @@
     // One set() of every AttachmentFilters idle props (type, date, custom
     // selects). Triggering each <select> change() lets the type filter's
     // model.set re-run Date.select() while year is still set, which puts
-    // the month back. Date's "All" is year/monthnum: false, not unset.
+    // the month back.
     if (model && typeof model.set === 'function') {
       var idle = collectIdleProps(browser);
-      if (model.get('year') != null || model.get('monthnum') != null) {
-        if (!Object.prototype.hasOwnProperty.call(idle, 'year')) {
-          idle.year = false;
-        }
-        if (!Object.prototype.hasOwnProperty.call(idle, 'monthnum')) {
-          idle.monthnum = false;
-        }
+      if (
+        model.get('year') != null ||
+        model.get('monthnum') != null ||
+        Object.prototype.hasOwnProperty.call(idle, 'year') ||
+        Object.prototype.hasOwnProperty.call(idle, 'monthnum')
+      ) {
+        // Core's Date filter uses false for "All dates", but Query.get()
+        // preserves false as year/monthnum request args. Any args outside
+        // Query's allowlist prevent it from observing wp.Uploader.queue, so a
+        // new upload stays hidden until reload. Null keeps the UI on "All"
+        // while Query.get() omits both args and observes uploads normally.
+        idle.year = null;
+        idle.monthnum = null;
       }
-      idle.ignore = +new Date();
       model.set(idle);
     }
 
