@@ -290,11 +290,20 @@ class ContentType
   }
 
   /**
-   * Whether the post type is hierarchical. Default false.
+   * Whether the post type is hierarchical (parent/child), like pages.
+   *
+   * Enabling this also adds `page-attributes` support. WordPress only shows the
+   * Parent control when that support is present, and the same support shows the
+   * Order field. Disabling hierarchy does not remove `page-attributes`.
    */
   public function hierarchical(bool $isHierarchical): static
   {
     $this->settings['hierarchical'] = $isHierarchical;
+
+    if ($isHierarchical) {
+      $this->addFeature('page-attributes');
+    }
+
     return $this;
   }
 
