@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CloakWP\Core\Content;
 
+use Closure;
 use Extended\ACF\Location;
 use InvalidArgumentException;
 
@@ -540,11 +541,13 @@ class ContentType
   }
 
   /**
-   * Provide an array of CloakWP `FieldGroup` class instances to attach groups of ACF Fields to this content type.
+   * Provide FieldGroup instances, or a factory returning them when needed.
+   *
+   * @param array<object>|Closure(): array<object> $fieldGroups
    */
-  public function fieldGroups(array $fieldGroups): static
+  public function fieldGroups(array|Closure $fieldGroups): static
   {
-    $this->fieldGroups = $fieldGroups;
+    $this->fieldGroups = $fieldGroups instanceof Closure ? [$fieldGroups] : $fieldGroups;
     return $this;
   }
 
@@ -557,13 +560,15 @@ class ContentType
   }
 
   /**
-   * Append CloakWP `FieldGroup` class instances without replacing existing groups.
+   * Append groups or a factory without resolving existing factories.
+   *
+   * @param array<object>|Closure(): array<object> $fieldGroups
    */
-  public function addFieldGroups(array $fieldGroups): static
+  public function addFieldGroups(array|Closure $fieldGroups): static
   {
     $this->fieldGroups = [
-      ...$this->getFieldGroups(),
-      ...$fieldGroups,
+      ...($this->fieldGroups ?? []),
+      ...($fieldGroups instanceof Closure ? [$fieldGroups] : $fieldGroups),
     ];
 
     return $this;
@@ -571,7 +576,12 @@ class ContentType
 
   public function getFieldGroups(): array
   {
-    return $this->fieldGroups ?? [];
+    $groups = [];
+    foreach ($this->fieldGroups ?? [] as $group) {
+      array_push($groups, ...($group instanceof Closure ? $group() : [$group]));
+    }
+    // Explicit reads and registration share the same constructed instances.
+    return $this->fieldGroups = $groups;
   }
 
   /**
@@ -622,12 +632,22 @@ class ContentType
     }, 3);
 
     if ($this->fieldGroups) {
-      foreach ($this->fieldGroups as $fieldGroup) {
-        $fieldGroup
-          ->location([
-            Location::where('post_type', '==', $this->slug)
-          ])
-          ->register();
+      // Evaluate requirements after init has registered the REST controllers,
+      // and construct fields after ACF's macros have been installed.
+      $registerFields = function (): void {
+        if (!apply_filters('cloakwp/content_type/register_field_groups', true, $this)) {
+          return;
+        }
+        foreach ($this->getFieldGroups() as $fieldGroup) {
+          $fieldGroup
+            ->location([Location::where('post_type', '==', $this->slug)])
+            ->register();
+        }
+      };
+      if (did_action('acf/include_fields')) {
+        $registerFields();
+      } else {
+        add_action('acf/include_fields', $registerFields);
       }
     }
 

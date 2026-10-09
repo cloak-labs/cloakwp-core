@@ -9,6 +9,8 @@ final class WpStubs
   /** @var list<array{hook: mixed, callback: mixed, priority: mixed, accepted_args: mixed}> */
   public static array $actions = [];
 
+  public static array $didActions = [];
+
   /** @var list<array{hook: mixed, callback: mixed, priority: mixed, accepted_args: mixed}> */
   public static array $filters = [];
 
@@ -34,6 +36,7 @@ final class WpStubs
   public static function reset(): void
   {
     self::$actions = [];
+    self::$didActions = [];
     self::$filters = [];
     self::$restRoutes = [];
     self::$enqueuedScripts = [];

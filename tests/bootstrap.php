@@ -119,6 +119,18 @@ if (!function_exists('add_filter')) {
   }
 }
 
+if (!function_exists('apply_filters')) {
+  function apply_filters($hook, $value, ...$args)
+  {
+    $filters = array_filter(\CloakWP\Core\Tests\WpStubs::$filters, static fn($filter) => $filter['hook'] === $hook);
+    usort($filters, static fn($a, $b) => $a['priority'] <=> $b['priority']);
+    foreach ($filters as $filter) {
+      $value = ($filter['callback'])(...array_slice([$value, ...$args], 0, $filter['accepted_args']));
+    }
+    return $value;
+  }
+}
+
 if (!function_exists('register_rest_route')) {
   function register_rest_route(string $namespace, string $route, array $args): bool
   {
@@ -251,6 +263,26 @@ if (!class_exists('WP_Query')) {
     public function set(string $key, $value): void
     {
       $this->query_vars[$key] = $value;
+    }
+  }
+}
+
+if (!function_exists('did_action')) {
+  function did_action(string $hook): int
+  {
+    return \CloakWP\Core\Tests\WpStubs::$didActions[$hook] ?? 0;
+  }
+}
+
+if (!function_exists('do_action')) {
+  function do_action(string $hook, ...$args): void
+  {
+    $stubs = \CloakWP\Core\Tests\WpStubs::class;
+    $stubs::$didActions[$hook] = ($stubs::$didActions[$hook] ?? 0) + 1;
+    $actions = array_filter($stubs::$actions, static fn(array $action): bool => $action['hook'] === $hook);
+    usort($actions, static fn(array $a, array $b): int => $a['priority'] <=> $b['priority']);
+    foreach ($actions as $action) {
+      ($action['callback'])(...array_slice($args, 0, $action['accepted_args']));
     }
   }
 }

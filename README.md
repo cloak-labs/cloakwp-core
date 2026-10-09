@@ -68,6 +68,34 @@ $model->boot();
 
 On multisite, `ContentModel::getInstance()` is per site; use `forSite($id)` when you need a specific site’s registry.
 
+Content-type field groups accept either an array or a lazy factory:
+
+```php
+$type->fieldGroups(static fn() => [
+  FieldGroup::make('Project Fields')->fields([
+    Text::make('Subtitle'),
+  ]),
+]);
+
+$type->addFieldGroups(static fn() => [FieldGroup::make('Extra Fields')]);
+```
+
+Factories construct their groups on registration, after the
+`cloakwp/content_type/register_field_groups` filter allows them. Requests that
+skip groups do not construct their fields. `addFieldGroups()` appends without
+resolving earlier factories; `fieldGroups()` replaces them, so an overridden
+parent definition need not be built. An explicit `getFieldGroups()` resolves and
+caches the instances for callers that inspect or extend them. Existing array
+declarations keep their eager behavior. Factories should only construct groups;
+keep save hooks, taxonomy registration, and other integrations in `configure()`.
+
+Field-group registration requirements are evaluated on `acf/include_fields`, after
+post types are registered on `init` and ACF macros are available. Skipped factory
+groups are never constructed. Calling `register()` after `acf/include_fields`
+imports permitted groups immediately; post-type registration retains its normal
+`init` lifecycle.
+
+
 `MenuLocation` is `register_nav_menu()` with a slug and label:
 
 ```php
